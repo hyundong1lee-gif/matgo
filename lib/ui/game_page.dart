@@ -290,7 +290,18 @@ class _GamePageState extends State<GamePage> {
         body: SafeArea(
           child: Stack(
             children: [
-              if (v == null)
+              if (s.versionMismatch)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      '두 폰의 앱 버전이 달라.\n두 폰 모두 옛날 앱을 지우고\n최신 APK를 다시 설치해줘.\n(로비 맨 아래 버전이 같아야 해)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
+                    ),
+                  ),
+                )
+              else if (v == null)
                 const Center(
                   child: Text(
                     '게임 정보를 기다리는 중...',

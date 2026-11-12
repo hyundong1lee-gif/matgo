@@ -17,6 +17,10 @@ class MatgoSession extends ChangeNotifier {
   ViewState? view;
   int _seq = 0;
   StreamSubscription<Map<String, dynamic>>? _sub;
+  Timer? _readyTimer;
+
+  /// 상대 폰의 앱 버전이 달라서 게임을 진행할 수 없는 상태
+  bool versionMismatch = false;
 
   MatgoSession.host(this.t) : isHost = true {
     _game = MatgoGame(first: 0);
@@ -26,7 +30,15 @@ class MatgoSession extends ChangeNotifier {
 
   MatgoSession.guest(this.t) : isHost = false {
     _sub = t.messages.listen(_onMsg);
-    t.send(Msg.ready);
+    t.send(Msg.ready, {'proto': kProtocol});
+    // 방장이 아직 준비되기 전에 보낸 요청은 사라질 수 있어서 상태를 받을 때까지 다시 보낸다
+    _readyTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (view != null || versionMismatch) {
+        _readyTimer?.cancel();
+        return;
+      }
+      t.send(Msg.ready, {'proto': kProtocol});
+    });
   }
 
   // ---------------------------------------------------------------- 입력
@@ -87,10 +99,19 @@ class MatgoSession extends ChangeNotifier {
       final g = _game!;
       switch (type) {
         case Msg.ready:
+          if (m['proto'] != kProtocol) {
+            versionMismatch = true;
+            notifyListeners();
+            break;
+          }
+          versionMismatch = false;
+          _publish();
+          break;
         case '_resumed':
-          _publish(); // 재연결되면 현재 상태를 그대로 다시 보낸다
+          if (!versionMismatch) _publish(); // 재연결되면 현재 상태를 다시 보낸다
           break;
         case Msg.playCard:
+          if (versionMismatch) break;
           if (g.playCard(1, m['cardId'] as int, shake: m['shake'] == true)) {
             _publish();
           }
@@ -114,11 +135,21 @@ class MatgoSession extends ChangeNotifier {
     } else {
       switch (type) {
         case Msg.state:
-          view = ViewState.fromJson(m);
+          if (m['proto'] != kProtocol) {
+            versionMismatch = true;
+            notifyListeners();
+            break;
+          }
+          try {
+            view = ViewState.fromJson(m);
+            versionMismatch = false;
+          } catch (_) {
+            versionMismatch = true;
+          }
           notifyListeners();
           break;
         case '_resumed':
-          t.send(Msg.ready);
+          t.send(Msg.ready, {'proto': kProtocol});
           break;
       }
     }
@@ -143,6 +174,7 @@ class MatgoSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _readyTimer?.cancel();
     _sub?.cancel();
     super.dispose();
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../game/session.dart';
+import '../net/messages.dart';
 import '../net/nearby_transport.dart';
 import '../net/permissions.dart';
 import '../net/transport.dart';
@@ -127,6 +128,12 @@ class _LobbyPageState extends State<LobbyPage> {
                       '인터넷 없이 가까운 폰끼리',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '앱 버전 $kAppVersion',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
                     const SizedBox(height: 20),
                     FilledButton(

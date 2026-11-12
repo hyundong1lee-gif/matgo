@@ -1,3 +1,4 @@
+import '../net/messages.dart';
 import 'matgo_game.dart';
 import 'scoring.dart';
 
@@ -71,6 +72,7 @@ class ViewState {
   }
 
   Map<String, dynamic> toJson() => {
+        'proto': kProtocol,
         'me': me,
         'seq': seq,
         'turn': turn,

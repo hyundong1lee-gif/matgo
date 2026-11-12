@@ -51,6 +51,11 @@ jobs:
           flutter analyze 2>&1 | tee ../analyze.txt || true
           flutter test 2>&1 | tee ../test.txt || true
 
+      - name: 고정 서명키 사용 (빌드마다 서명이 같아야 덮어서 설치됨)
+        run: |
+          mkdir -p ~/.android
+          cp tools/debug.keystore ~/.android/debug.keystore
+
       - name: APK 빌드
         working-directory: app
         run: flutter build apk --release
