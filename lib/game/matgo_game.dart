@@ -4,7 +4,15 @@ import 'cards.dart';
 import 'config.dart';
 import 'scoring.dart';
 
-enum Phase { playCard, chooseFloorHand, chooseFloorStock, goStop, ended }
+/// flipStock: 손패를 낸 뒤 더미 패를 뒤집기를 기다리는 단계
+enum Phase {
+  playCard,
+  chooseFloorHand,
+  chooseFloorStock,
+  flipStock,
+  goStop,
+  ended,
+}
 
 enum HandCase { none, unmatched, paired, pairedFromTwo, captured }
 
@@ -99,10 +107,14 @@ class MatgoGame {
   ];
   TurnCtx ctx = TurnCtx();
   List<GameEvent> events = [];
-  int? lastHand;
+  List<int> lastHands = []; // 이번 턴에 낸 손패 (폭탄이면 3장)
   int? lastStock;
   int? lastBy;
   GameResult? result;
+
+  /// 폭탄 또는 흔들기를 선언한 횟수. 이긴 사람의 점수에 2배씩 곱한다.
+  final List<int> shakeCount = [0, 0];
+  final List<int> _dummySeq = [0, 0];
 
   // ------------------------------------------------------------ 분배
 
@@ -143,27 +155,44 @@ class MatgoGame {
 
   // -------------------------------------------------------- 플레이어 행동
 
-  bool playCard(int p, int cardId) {
+  /// shake가 true이고 손에 같은 월 3장 + 바닥에 같은 월 0장이면 흔들기로 처리한다.
+  bool playCard(int p, int cardId, {bool shake = false}) {
     if (phase != Phase.playCard || turn != p || !hands[p].contains(cardId)) {
       return false;
     }
     events = [];
-    hands[p].remove(cardId);
-    ctx = TurnCtx()..hand = cardId;
-    lastHand = cardId;
+    lastHands = [cardId];
     lastStock = null;
     lastBy = p;
+    ctx = TurnCtx()..hand = cardId;
+
+    // 폭탄패(빈 패)는 바닥과 상관없이 더미만 뒤집는다
+    if (isDummyId(cardId)) {
+      hands[p].remove(cardId);
+      ctx.hcase = HandCase.none;
+      _afterHand(p);
+      return true;
+    }
 
     final m = allCards[cardId].month;
+    final inHand = hands[p]
+        .where((c) => !isDummyId(c) && allCards[c].month == m)
+        .length;
     final matches = floor.where((c) => allCards[c].month == m).toList();
+    if (shake && inHand >= 3 && matches.isEmpty) {
+      shakeCount[p]++;
+      _ev(p, 'shake');
+    }
+
+    hands[p].remove(cardId);
     if (matches.isEmpty) {
       ctx.hcase = HandCase.unmatched;
       floor.add(cardId);
-      _flip(p);
+      _afterHand(p);
     } else if (matches.length == 1) {
       ctx.hcase = HandCase.paired;
       ctx.partner = matches[0];
-      _flip(p);
+      _afterHand(p);
     } else if (matches.length == 2) {
       ctx.options = matches;
       phase = Phase.chooseFloorHand;
@@ -174,8 +203,59 @@ class MatgoGame {
       _capture(p, [cardId, ...matches]);
       _ev(p, 'eat3');
       _steal(p);
-      _flip(p);
+      _afterHand(p);
     }
+    return true;
+  }
+
+  /// 폭탄: 손에 같은 월 3장 + 바닥에 같은 월 1장이면 3장을 한꺼번에 내서 4장을 먹는다.
+  /// 상대 피 1장을 가져오고 폭탄패 2장을 받는다(남은 턴 수를 맞추기 위해서).
+  bool playBomb(int p, int month) {
+    if (phase != Phase.playCard || turn != p) return false;
+    final mine = hands[p]
+        .where((c) => !isDummyId(c) && allCards[c].month == month)
+        .toList();
+    final fl = floor.where((c) => allCards[c].month == month).toList();
+    if (mine.length != 3 || fl.length != 1) return false;
+
+    events = [];
+    ctx = TurnCtx()
+      ..hand = mine.first
+      ..hcase = HandCase.captured;
+    lastHands = List<int>.of(mine);
+    lastStock = null;
+    lastBy = p;
+    for (final c in mine) {
+      hands[p].remove(c);
+    }
+    floor.remove(fl.first);
+    _capture(p, [...mine, fl.first]);
+    shakeCount[p]++;
+    _ev(p, 'bomb');
+    _steal(p);
+    for (var k = 0; k < 2; k++) {
+      hands[p].add(kDummyBase + p * 10 + _dummySeq[p]);
+      _dummySeq[p]++;
+    }
+    _afterHand(p);
+    return true;
+  }
+
+  /// 손패 처리가 끝나면 더미 패를 뒤집을 차례를 기다린다. 더미가 없으면 바로 턴을 끝낸다.
+  void _afterHand(int p) {
+    if (stock.isEmpty) {
+      _finishTurn(p);
+    } else {
+      phase = Phase.flipStock;
+    }
+  }
+
+  /// 더미 맨 위 패를 뒤집는다. UI가 플레이어의 터치를 받았을 때 호출한다.
+  bool flipStock(int p) {
+    if (phase != Phase.flipStock || turn != p) return false;
+    events = [];
+    phase = Phase.playCard; // 아래 처리에서 필요하면 바뀐다
+    _flip(p);
     return true;
   }
 
@@ -188,7 +268,7 @@ class MatgoGame {
       ctx.other = ctx.options.firstWhere((c) => c != cardId);
       ctx.options = [];
       phase = Phase.playCard;
-      _flip(p);
+      _afterHand(p);
       return true;
     }
     if (phase == Phase.chooseFloorStock) {
@@ -228,7 +308,7 @@ class MatgoGame {
     ctx.stockCard = s;
     lastStock = s;
     final h = ctx.hand!;
-    final sameMonth = allCards[s].month == allCards[h].month;
+    final sameMonth = !isDummyId(h) && allCards[s].month == allCards[h].month;
 
     switch (ctx.hcase) {
       case HandCase.unmatched:
@@ -383,6 +463,12 @@ class MatgoGame {
     if (ws.piScore > 0 && ls.piValue <= MatgoConfig.piBakMaxPi) {
       pts *= MatgoConfig.piBakMultiplier;
       lines.add('피박 ×${MatgoConfig.piBakMultiplier}');
+    }
+    final sh = shakeCount[w];
+    if (sh > 0) {
+      final mult = 1 << sh;
+      pts *= mult;
+      lines.add('폭탄/흔들기 ×$mult');
     }
     return GameResult(w, pts, lines, [
       scoreOf(captured[0]).lines,

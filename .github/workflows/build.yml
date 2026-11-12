@@ -1,0 +1,77 @@
+name: build-apk
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SRC: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Flutter 프로젝트 만들기
+        run: flutter create --platforms=android --project-name matgo app
+
+      - name: 소스 복사
+        run: |
+          rm -rf app/lib app/test
+          cp -r lib app/lib
+          cp -r test app/test
+
+      - name: 패키지 추가
+        working-directory: app
+        run: flutter pub add nearby_connections permission_handler:12.0.1 "override:permission_handler_android:12.0.10"
+
+      - name: 권한 추가
+        run: python3 tools/patch_manifest.py app/android/app/src/main/AndroidManifest.xml android_manifest_permissions.xml
+
+      - name: 와이파이 권한 보정
+        run: sed -i -E '/WIFI_STATE|LOCATION/s/ android:maxSdkVersion="[0-9]+"//' app/android/app/src/main/AndroidManifest.xml
+
+      - name: 분석과 테스트 (실패해도 계속)
+        working-directory: app
+        continue-on-error: true
+        run: |
+          flutter analyze 2>&1 | tee ../analyze.txt || true
+          flutter test 2>&1 | tee ../test.txt || true
+
+      - name: APK 빌드
+        working-directory: app
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matgo-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: matgo-logs
+          path: |
+            analyze.txt
+            test.txt
+
+      - name: 릴리스에 APK 올리기 (바로 다운로드용)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/app/outputs/flutter-apk/app-release.apk matgo.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest matgo.apk --title "최신 APK" --notes "자동 빌드 ${GITHUB_SHA::7}" --target "$GITHUB_SHA"

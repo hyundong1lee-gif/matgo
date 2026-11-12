@@ -17,6 +17,11 @@ const List<String> monthNames = [
   '비',
 ];
 
+/// 폭탄을 내면 받는 폭탄패(빈 패)의 id는 100 이상이다. 48장 카드 id와 겹치지 않는다.
+const int kDummyBase = 100;
+
+bool isDummyId(int id) => id >= kDummyBase;
+
 class CardInfo {
   final int id;
   final int month; // 1..12

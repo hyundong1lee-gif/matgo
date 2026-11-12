@@ -11,7 +11,9 @@ import 'dart:typed_data';
 /// | bye           | 양방향          | reason            |
 /// | ready         | 참가자 → 방장   | - (상태 요청)     |
 /// | state         | 방장 → 참가자   | 참가자 시점 상태  |
-/// | play_card     | 참가자 → 방장   | cardId            |
+/// | play_card     | 참가자 → 방장   | cardId, shake(bool) |
+/// | bomb          | 참가자 → 방장   | month             |
+/// | flip_stock    | 참가자 → 방장   | -                 |
 /// | choose_floor  | 참가자 → 방장   | cardId            |
 /// | go_stop       | 참가자 → 방장   | go(bool)          |
 /// | new_game      | 참가자 → 방장   | -                 |
@@ -27,6 +29,8 @@ class Msg {
   static const ready = 'ready';
   static const state = 'state';
   static const playCard = 'play_card';
+  static const bomb = 'bomb';
+  static const flipStock = 'flip_stock';
   static const chooseFloor = 'choose_floor';
   static const goStop = 'go_stop';
   static const newGame = 'new_game';

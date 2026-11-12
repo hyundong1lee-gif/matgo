@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../game/cards.dart';
@@ -49,10 +51,13 @@ class CardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final emphasized = selected || highlight;
+    final isGodori = id != null && !isDummyId(id!) && allCards[id!].godori;
+    final emphasized = selected || highlight || isGodori;
     final borderColor = selected
         ? const Color(0xFF1565C0)
-        : (highlight ? const Color(0xFFFFD600) : Colors.black54);
+        : (highlight
+            ? const Color(0xFFFFD600)
+            : (isGodori ? const Color(0xFFD50000) : Colors.black54));
 
     final body = Container(
       width: w,
@@ -60,18 +65,18 @@ class CardView extends StatelessWidget {
       decoration: BoxDecoration(
         color: id == null ? const Color(0xFF1A237E) : const Color(0xFFFFF8E7),
         borderRadius: BorderRadius.circular(w * 0.12),
-        border: Border.all(color: borderColor, width: emphasized ? 3 : 1),
+        border: Border.all(
+          color: borderColor,
+          width: (selected || highlight) ? 3 : (emphasized ? 2 : 1),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: id == null ? _back() : _face(allCards[id!]),
+      child: id == null
+          ? _back()
+          : (isDummyId(id!) ? _dummyFace() : _face(allCards[id!])),
     );
 
     Widget out = Opacity(opacity: dim ? 0.4 : 1.0, child: body);
-    out = AnimatedSlide(
-      duration: const Duration(milliseconds: 150),
-      offset: Offset(0, selected ? -0.14 : 0),
-      child: out,
-    );
     if (animate) {
       out = TweenAnimationBuilder<double>(
         tween: Tween<double>(begin: 0.6, end: 1.0),
@@ -85,6 +90,30 @@ class CardView extends StatelessWidget {
       out = GestureDetector(onTap: onTap, child: out);
     }
     return out;
+  }
+
+  Widget _dummyFace() {
+    return Container(
+      color: const Color(0xFFFFE0B2),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '폭탄',
+            style: TextStyle(
+              fontSize: w * 0.26,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFFD84315),
+            ),
+          ),
+          Text(
+            '패',
+            style: TextStyle(fontSize: w * 0.22, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _back() {
@@ -179,9 +208,20 @@ class CardView extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _badge(s, const Color(0xFFFF9800), '열'),
+          _badge(
+            s,
+            c.godori ? const Color(0xFFFF7043) : const Color(0xFFFF9800),
+            c.godori ? '새' : '열',
+          ),
           if (c.godori)
-            Text('★', style: TextStyle(fontSize: w * 0.2, color: Colors.red)),
+            Text(
+              '고도리',
+              style: TextStyle(
+                fontSize: w * 0.17,
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
         ],
       );
     }
@@ -226,44 +266,41 @@ class CardView extends StatelessWidget {
   }
 }
 
-/// 먹은 패를 광 열끗 띠 피 순서로 겹쳐서 한 줄로 보여 준다.
-class CapturedRow extends StatelessWidget {
-  const CapturedRow({super.key, required this.ids, required this.w});
+/// 앞면과 뒷면을 가진 카드. faceUp이 바뀌면 좌우로 돌면서 뒤집힌다.
+class FlipCard extends StatelessWidget {
+  const FlipCard({
+    super.key,
+    required this.faceUp,
+    required this.front,
+    required this.back,
+  });
 
-  final List<int> ids;
-  final double w;
+  final bool faceUp;
+  final Widget front;
+  final Widget back;
 
   @override
   Widget build(BuildContext context) {
-    final order = [Kind.gwang, Kind.yeol, Kind.tti, Kind.pi];
-    final step = w * 0.4;
-    final children = <Widget>[];
-    for (final k in order) {
-      final g = ids.where((id) => allCards[id].kind == k).toList()..sort();
-      if (g.isEmpty) continue;
-      children.add(
-        SizedBox(
-          width: w + step * (g.length - 1),
-          height: w * 1.55,
-          child: Stack(
-            children: [
-              for (var i = 0; i < g.length; i++)
-                Positioned(
-                  left: step * i,
-                  child: CardView(
-                    key: ValueKey('c${g[i]}'),
-                    id: g[i],
-                    w: w,
-                    animate: false,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
-      children.add(SizedBox(width: w * 0.35));
-    }
-    if (children.isEmpty) return SizedBox(height: w * 1.55);
-    return Row(mainAxisSize: MainAxisSize.min, children: children);
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: faceUp ? 1.0 : 0.0),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeInOut,
+      builder: (context, t, _) {
+        final showFront = t >= 0.5;
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.002)
+            ..rotateY(t * math.pi),
+          child: showFront
+              ? Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.rotationY(math.pi),
+                  child: front,
+                )
+              : back,
+        );
+      },
+    );
   }
 }

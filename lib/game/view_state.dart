@@ -17,11 +17,14 @@ class ViewState {
   final List<int> goCount;
   final List<int> scores;
   final List<int> options;
-  final int? lastHand;
+  final List<int> lastHands; // 이번 턴에 낸 손패
+  final List<int> shakes; // 플레이어별 폭탄/흔들기 횟수
   final int? lastStock;
   final int? lastBy;
   final List<GameEvent> events;
   final GameResult? result;
+
+  int? get lastHand => lastHands.isEmpty ? null : lastHands.first;
 
   const ViewState({
     required this.me,
@@ -36,7 +39,8 @@ class ViewState {
     required this.goCount,
     required this.scores,
     required this.options,
-    required this.lastHand,
+    required this.lastHands,
+    required this.shakes,
     required this.lastStock,
     required this.lastBy,
     required this.events,
@@ -57,7 +61,8 @@ class ViewState {
       goCount: List<int>.of(g.goCount),
       scores: [scoreOf(g.captured[0]).total, scoreOf(g.captured[1]).total],
       options: List<int>.of(g.ctx.options),
-      lastHand: g.lastHand,
+      lastHands: List<int>.of(g.lastHands),
+      shakes: List<int>.of(g.shakeCount),
       lastStock: g.lastStock,
       lastBy: g.lastBy,
       events: List<GameEvent>.of(g.events),
@@ -78,7 +83,8 @@ class ViewState {
         'goCount': goCount,
         'scores': scores,
         'options': options,
-        'lastHand': lastHand,
+        'lastHands': lastHands,
+        'shakes': shakes,
         'lastStock': lastStock,
         'lastBy': lastBy,
         'events': events.map((e) => e.toJson()).toList(),
@@ -99,7 +105,8 @@ class ViewState {
       goCount: _ints(j['goCount']),
       scores: _ints(j['scores']),
       options: _ints(j['options']),
-      lastHand: j['lastHand'] as int?,
+      lastHands: _ints(j['lastHands']),
+      shakes: _ints(j['shakes']),
       lastStock: j['lastStock'] as int?,
       lastBy: j['lastBy'] as int?,
       events: (j['events'] as List)

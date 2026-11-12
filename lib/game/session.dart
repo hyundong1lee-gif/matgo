@@ -31,11 +31,27 @@ class MatgoSession extends ChangeNotifier {
 
   // ---------------------------------------------------------------- 입력
 
-  void play(int cardId) {
+  void play(int cardId, {bool shake = false}) {
     if (isHost) {
-      if (_game!.playCard(0, cardId)) _publish();
+      if (_game!.playCard(0, cardId, shake: shake)) _publish();
     } else {
-      t.send(Msg.playCard, {'cardId': cardId});
+      t.send(Msg.playCard, {'cardId': cardId, 'shake': shake});
+    }
+  }
+
+  void bomb(int month) {
+    if (isHost) {
+      if (_game!.playBomb(0, month)) _publish();
+    } else {
+      t.send(Msg.bomb, {'month': month});
+    }
+  }
+
+  void flip() {
+    if (isHost) {
+      if (_game!.flipStock(0)) _publish();
+    } else {
+      t.send(Msg.flipStock);
     }
   }
 
@@ -75,7 +91,15 @@ class MatgoSession extends ChangeNotifier {
           _publish(); // 재연결되면 현재 상태를 그대로 다시 보낸다
           break;
         case Msg.playCard:
-          if (g.playCard(1, m['cardId'] as int)) _publish();
+          if (g.playCard(1, m['cardId'] as int, shake: m['shake'] == true)) {
+            _publish();
+          }
+          break;
+        case Msg.bomb:
+          if (g.playBomb(1, m['month'] as int)) _publish();
+          break;
+        case Msg.flipStock:
+          if (g.flipStock(1)) _publish();
           break;
         case Msg.chooseFloor:
           if (g.chooseFloor(1, m['cardId'] as int)) _publish();
