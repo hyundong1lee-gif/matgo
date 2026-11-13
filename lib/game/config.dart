@@ -30,6 +30,7 @@ class MatgoConfig {
   // 박
   static const int gwangBakMultiplier = 2;
   static const int piBakMultiplier = 2;
+  static const int goBakMultiplier = 2; // 고를 부른 쪽이 지면 (고박)
   static const int piBakMaxPi = 5; // 진 쪽 피가 이 값 이하이면 피박
 
   // 뻑 먹기 따닥 쪽 싹쓸이로 가져오는 피 장수

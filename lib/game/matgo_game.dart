@@ -464,6 +464,11 @@ class MatgoGame {
       pts *= MatgoConfig.piBakMultiplier;
       lines.add('피박 ×${MatgoConfig.piBakMultiplier}');
     }
+    if (goCount[l] > 0) {
+      // 고박: 고를 불렀다가 상대에게 먼저 난 경우
+      pts *= MatgoConfig.goBakMultiplier;
+      lines.add('고박 ×${MatgoConfig.goBakMultiplier}');
+    }
     final sh = shakeCount[w];
     if (sh > 0) {
       final mult = 1 << sh;

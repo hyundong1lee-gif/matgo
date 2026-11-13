@@ -20,15 +20,47 @@ class MatgoSession extends ChangeNotifier {
   int _gameId = 0;
   StreamSubscription<Map<String, dynamic>>? _sub;
   Timer? _readyTimer;
+  Timer? _walletTimer;
 
   /// 상대 폰의 앱 버전이 달라서 게임을 진행할 수 없는 상태
   bool versionMismatch = false;
+
+  /// 상대가 보낸 지갑 사본 (상대 지갑 보기용)
+  WalletSnapshot? oppWallet;
+
+  void _sendWallet({bool ask = false}) {
+    t.send(Msg.wallet, {'ask': ask, ...Wallet.i.snapshot().toJson()});
+  }
+
+  void _onWallet(Map<String, dynamic> m) {
+    try {
+      oppWallet = WalletSnapshot.fromJson(m);
+      notifyListeners();
+    } catch (_) {}
+    if (m['ask'] == true) _sendWallet();
+  }
+
+  void _walletChanged() => _sendWallet();
+
+  /// 내 지갑이 바뀔 때마다 상대에게 보내고 상대 지갑을 받을 때까지 다시 묻는다
+  void _startWalletSync() {
+    Wallet.i.addListener(_walletChanged);
+    _sendWallet(ask: true);
+    _walletTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (oppWallet != null) {
+        _walletTimer?.cancel();
+        return;
+      }
+      _sendWallet(ask: true);
+    });
+  }
 
   MatgoSession.host(this.t) : isHost = true {
     _game = MatgoGame(first: 0);
     _gameId = DateTime.now().millisecondsSinceEpoch;
     _sub = t.messages.listen(_onMsg);
     _publish();
+    _startWalletSync();
   }
 
   MatgoSession.guest(this.t) : isHost = false {
@@ -42,6 +74,7 @@ class MatgoSession extends ChangeNotifier {
       }
       t.send(Msg.ready, {'proto': kProtocol});
     });
+    _startWalletSync();
   }
 
   // ---------------------------------------------------------------- 입력
@@ -112,6 +145,10 @@ class MatgoSession extends ChangeNotifier {
           break;
         case '_resumed':
           if (!versionMismatch) _publish(); // 재연결되면 현재 상태를 다시 보낸다
+          _sendWallet(ask: true);
+          break;
+        case Msg.wallet:
+          _onWallet(m);
           break;
         case Msg.playCard:
           if (versionMismatch) break;
@@ -154,6 +191,10 @@ class MatgoSession extends ChangeNotifier {
           break;
         case '_resumed':
           t.send(Msg.ready, {'proto': kProtocol});
+          _sendWallet(ask: true);
+          break;
+        case Msg.wallet:
+          _onWallet(m);
           break;
       }
     }
@@ -198,6 +239,8 @@ class MatgoSession extends ChangeNotifier {
   @override
   void dispose() {
     _readyTimer?.cancel();
+    _walletTimer?.cancel();
+    Wallet.i.removeListener(_walletChanged);
     _sub?.cancel();
     super.dispose();
   }

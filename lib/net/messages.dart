@@ -17,12 +17,13 @@ import 'dart:typed_data';
 /// | choose_floor  | 참가자 → 방장   | cardId            |
 /// | go_stop       | 참가자 → 방장   | go(bool)          |
 /// | new_game      | 참가자 → 방장   | -                 |
+/// | wallet        | 양방향          | ask(bool) 지갑 사본 |
 /// | _resumed      | 내부 이벤트     | 재연결 성공 알림  |
 /// 두 폰의 앱 버전이 다르면 게임이 어긋나므로 통신 규칙이 바뀔 때마다 올린다.
-const int kProtocol = 4;
+const int kProtocol = 5;
 
 /// 로비에 보여 주는 버전. 두 폰이 같은지 눈으로 확인하는 용도.
-const String kAppVersion = 'v6 (인터넷)';
+const String kAppVersion = 'v7 (박·지갑 공개)';
 
 class Msg {
   static const hello = 'hello';
@@ -40,6 +41,7 @@ class Msg {
   static const chooseFloor = 'choose_floor';
   static const goStop = 'go_stop';
   static const newGame = 'new_game';
+  static const wallet = 'wallet';
 
   static Uint8List encode(String type, [Map<String, dynamic> data = const {}]) {
     return Uint8List.fromList(utf8.encode(jsonEncode({'type': type, ...data})));

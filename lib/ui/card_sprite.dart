@@ -36,6 +36,9 @@ class SpriteSpec {
   double? spawnW;
   bool spawnFaceDown = false;
 
+  // 슬로우 모션: 이동에 걸리는 시간을 늘린다 (null이면 기본)
+  int? slowMs;
+
   // 이번 이동을 시작하기 전에 기다릴 시간 (더미를 뒤집는 동안 기다리게 한다)
   int delayMs = 0;
 }
@@ -113,7 +116,7 @@ class _CardSpriteState extends State<CardSprite> {
   Widget build(BuildContext context) {
     final s = widget.spec;
     return AnimatedPositioned(
-      duration: Duration(milliseconds: s.fast ? 260 : 520),
+      duration: Duration(milliseconds: s.slowMs ?? (s.fast ? 260 : 520)),
       curve: Curves.easeInOutCubic,
       left: _pos.dx,
       top: _pos.dy,

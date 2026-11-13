@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../game/session.dart';
 import '../game/wallet.dart';
 import 'stats_page.dart';
 
@@ -49,6 +50,11 @@ class WalletPanel extends StatelessWidget {
                     fontSize: 16,
                     color: w.debt > 0 ? Colors.red : Colors.black54,
                   ),
+                ),
+                Text(
+                  '빚 리셋 ${w.resetCount}번',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 Text(
                   '게임으로 번 돈 ${w.pureProfit > 0 ? '+' : ''}${won(w.pureProfit)}',
@@ -140,4 +146,99 @@ class WalletPanel extends StatelessWidget {
     );
     if (ok == true) w.resetDebt();
   }
+}
+
+/// 게임 중에 상대 지갑을 읽기 전용으로 본다
+Future<void> showOppWallet(BuildContext context, MatgoSession s) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) => Dialog(
+      child: ListenableBuilder(
+        listenable: s,
+        builder: (context, _) {
+          final d = s.oppWallet;
+          if (d == null) {
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('상대 지갑 정보를 받는 중이야...'),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    '상대 지갑',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '잔액 ${won(d.money)}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: d.money < 0 ? Colors.red : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    '빚 ${won(d.debt)}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: d.debt > 0 ? Colors.red : Colors.black54,
+                    ),
+                  ),
+                  Text(
+                    '빚 리셋 ${d.resets}번',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  Text(
+                    '게임으로 번 돈 ${d.pureProfit > 0 ? '+' : ''}${won(d.pureProfit)}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: d.pureProfit < 0 ? Colors.red : Colors.green.shade700,
+                    ),
+                  ),
+                  Text(
+                    '${d.records.length}판 ${d.wins}승 ${d.losses}패 ${d.draws}무',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => StatsPage(
+                              title: '상대 전적',
+                              source: s,
+                              read: () => s.oppWallet,
+                            ),
+                          ),
+                        ),
+                        child: const Text('상대 전적 보기'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('닫기'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
 }

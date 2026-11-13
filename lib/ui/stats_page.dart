@@ -12,17 +12,23 @@ String _time(int ms) {
 
 /// 전적 화면: 승패 요약 + 순수 게임 손익 + 모든 판 기록
 class StatsPage extends StatelessWidget {
-  const StatsPage({super.key});
+  /// 기본은 내 전적. 상대 전적을 볼 때는 [source]와 [read]를 넘긴다.
+  const StatsPage({super.key, this.title = '전적', this.source, this.read});
+
+  final String title;
+  final Listenable? source;
+  final WalletSnapshot? Function()? read;
 
   @override
   Widget build(BuildContext context) {
-    final w = Wallet.i;
     return Scaffold(
-      appBar: AppBar(title: const Text('전적')),
+      appBar: AppBar(title: Text(title)),
       body: SafeArea(
         child: ListenableBuilder(
-          listenable: w,
+          listenable: source ?? Wallet.i,
           builder: (context, _) {
+            final w = (read != null ? read!() : Wallet.i.snapshot(maxRecords: 100000));
+            if (w == null) return const Center(child: Text('아직 정보를 못 받았어'));
             final total = w.records.length;
             final decided = w.wins + w.losses;
             final rate = decided == 0 ? '-' : '${(w.wins * 100 / decided).round()}%';
@@ -45,6 +51,7 @@ class StatsPage extends StatelessWidget {
                         _sign(profit),
                         color: profit < 0 ? Colors.red : Colors.green.shade700,
                       ),
+                      _stat('빚 리셋', '${w.resets}번'),
                     ],
                   ),
                 ),

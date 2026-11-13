@@ -283,6 +283,37 @@ void main() {
     });
   });
 
+  group('박', () {
+    MatgoGame base({List<int>? cap1}) => MatgoGame.custom(
+          hand0: [cid(5, 0), cid(5, 1), cid(5, 2), cid(6, 3)],
+          hand1: [cid(8, 2), cid(9, 3), cid(10, 2), cid(11, 2)],
+          floor: [cid(5, 3), cid(7, 2)],
+          stock: [cid(3, 2), cid(4, 2)],
+          captured0: [cid(1, 0), cid(3, 0), cid(8, 0)],
+          captured1: cap1 ?? [cid(2, 3), cid(2, 2)],
+        );
+
+    test('진 쪽이 고를 불렀으면 고박 ×2', () {
+      final g = base();
+      g.goCount[1] = 1;
+      expect(g.playBomb(0, 5), true);
+      expect(g.flipStock(0), true);
+      g.goStop(0, false);
+      expect(g.result!.lines.any((l) => l.startsWith('고박')), true);
+      // 12점에서 고박 ×2
+      expect(g.result!.points, 24);
+    });
+
+    test('고를 안 불렀으면 고박 없음', () {
+      final g = base();
+      expect(g.playBomb(0, 5), true);
+      expect(g.flipStock(0), true);
+      g.goStop(0, false);
+      expect(g.result!.lines.any((l) => l.startsWith('고박')), false);
+      expect(g.result!.points, 12);
+    });
+  });
+
   group('전체 진행', () {
     test('무작위 판을 끝까지 돌려도 카드가 48장으로 유지된다', () {
       for (var n = 0; n < 200; n++) {

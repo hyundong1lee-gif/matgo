@@ -3,6 +3,7 @@ import 'package:matgo/game/wallet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  snapshotTests();
   test('시작 50억 정산은 판마다 한 번만', () {
     final w = Wallet.forTest();
     expect(w.money, 5000000000);
@@ -103,5 +104,41 @@ void main() {
     await w.load();
     expect(w.money, 5000000000);
     expect(w.records, isEmpty);
+  });
+}
+
+void snapshotTests() {
+  test('빚 리셋 횟수를 센다', () {
+    final w = Wallet.forTest();
+    expect(w.resetCount, 0);
+    w.borrow();
+    w.borrow();
+    w.resetDebt();
+    expect(w.resetCount, 1);
+    w.borrow();
+    expect(w.resetDebt(), false); // 빚 60억은 아직 리셋 불가
+    expect(w.resetCount, 1);
+    w.borrow();
+    w.resetDebt();
+    expect(w.resetCount, 2);
+  });
+
+  test('지갑 사본을 주고받을 수 있고 최근 판만 보낸다', () {
+    final w = Wallet.forTest();
+    for (var i = 1; i <= 200; i++) {
+      w.settle(i, i.isEven ? 100000000 : -100000000,
+          result: i.isEven ? 1 : -1, myScore: 5, oppScore: 2, points: 3);
+    }
+    w.borrow();
+    final snap = w.snapshot();
+    expect(snap.records.length, 150);
+    expect(snap.records.first.id, 51);
+    final back = WalletSnapshot.fromJson(snap.toJson());
+    expect(back.money, w.money);
+    expect(back.debt, w.debt);
+    expect(back.resets, 0);
+    expect(back.records.length, 150);
+    expect(back.wins + back.losses, 150);
+    expect(back.pureProfit, 0);
   });
 }

@@ -42,6 +42,9 @@ String eventText(GameEvent e, int me) {
   return e.code;
 }
 
+/// 카드가 나와서 바닥으로 가는 과정을 천천히 강조해서 보여 줄 사건
+const Set<String> _slowEvents = {'jjok', 'ppeok', 'ttadak', 'sweep'};
+
 const Set<String> _strongEvents = {
   'jjok',
   'ppeok',
@@ -79,6 +82,7 @@ class _GamePageState extends State<GamePage> {
   final Map<int, double> _spawnW = {};
   final Set<int> _spawnFaceDown = {};
   int _stepDelay = 0;
+  int _slowMs = 0; // 0이면 보통 속도
   DateTime _stepUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   String? _banner;
@@ -130,6 +134,26 @@ class _GamePageState extends State<GamePage> {
       _slotOf[id] = k;
       used.add(k);
     }
+    // 같은 월 3장이 바닥에 있으면(쌓임) 한 칸에 겹쳐 놓는다
+    for (final ids in _stacks(v).values) {
+      final anchor = ids.map((e) => _slotOf[e]!).reduce((a, b) => a < b ? a : b);
+      for (final id in ids) {
+        _slotOf[id] = anchor;
+      }
+    }
+  }
+
+  /// 바닥에서 같은 월이 3장 이상 모인 묶음 (월 -> 카드 id 오름차순)
+  Map<int, List<int>> _stacks(ViewState v) {
+    final byMonth = <int, List<int>>{};
+    for (final id in v.floor) {
+      byMonth.putIfAbsent(allCards[id].month, () => []).add(id);
+    }
+    byMonth.removeWhere((_, ids) => ids.length < 3);
+    for (final ids in byMonth.values) {
+      ids.sort();
+    }
+    return byMonth;
   }
 
   Set<int> _cardIds(ViewState v) => {
@@ -158,6 +182,7 @@ class _GamePageState extends State<GamePage> {
     _spawnW.clear();
     _spawnFaceDown.clear();
     _stepDelay = 0;
+    _slowMs = 0;
     _syncSlots(v);
     if (prev != null && prev.seq != v.seq) {
       _planStep(prev, v);
@@ -200,14 +225,17 @@ class _GamePageState extends State<GamePage> {
     final handStep =
         v.lastHands.isNotEmpty && !_sameList(v.lastHands, prev.lastHands);
 
-    _stepDelay = flipStep ? 850 : 0;
-    _stepUntil = DateTime.now().add(const Duration(milliseconds: 1800));
+    final slow = v.events.any((e) => _slowEvents.contains(e.code));
+    _slowMs = slow ? 1700 : 0;
+    _stepDelay = flipStep ? (slow ? 1500 : 850) : (slow ? 500 : 0);
+    _stepUntil = DateTime.now().add(Duration(milliseconds: slow ? 3600 : 1800));
 
     for (final id in now) {
       if (known.contains(id)) continue;
       if (flipStep && id == v.lastStock) {
         _spawn[id] = TableLayout.deck;
-        _spawnW[id] = TableLayout.floorW;
+        // 슬로우 모션일 때는 크게 뒤집어 보여 주고 작아지면서 자리로 간다
+        _spawnW[id] = slow ? 80 : TableLayout.floorW;
         _spawnFaceDown.add(id);
       } else if (v.lastHands.contains(id) && v.lastBy != v.me) {
         final k = v.lastHands.indexOf(id);
@@ -224,7 +252,9 @@ class _GamePageState extends State<GamePage> {
 
   /// 진동과 문구를 카드가 도착하는 시점에 맞춘다.
   void _scheduleFx(ViewState v, bool flipStep, bool handStep) {
-    final land = flipStep ? 850 + 520 : 520;
+    final slow = _slowMs > 0;
+    final land = (flipStep ? _stepDelay : (slow ? _stepDelay : 0)) +
+        (slow ? _slowMs : 520);
     if (flipStep) {
       _later(320, () => HapticFeedback.selectionClick());
     }
@@ -239,9 +269,9 @@ class _GamePageState extends State<GamePage> {
     if (texts.isNotEmpty) {
       final text = texts.join('   ');
       final token = ++_bannerSeq;
-      final showAt = flipStep ? 900 : 250;
+      final showAt = slow ? (flipStep ? 700 : 150) : (flipStep ? 900 : 250);
       _later(showAt, () => setState(() => _banner = text));
-      _later(showAt + 2300, () {
+      _later(showAt + (slow ? 3200 : 2300), () {
         if (_bannerSeq == token) setState(() => _banner = null);
       });
     }
@@ -421,16 +451,23 @@ class _GamePageState extends State<GamePage> {
       });
     }
 
-    // 바닥
+    // 바닥 (같은 월 3장은 조금씩 어긋나게 겹쳐서 쌓인 것을 알 수 있게 한다)
+    final stackIndex = <int, int>{};
+    for (final ids in _stacks(v).values) {
+      for (var i = 0; i < ids.length; i++) {
+        stackIndex[ids[i]] = i;
+      }
+    }
     for (final id in v.floor) {
       final slot = _slotOf[id] ?? 0;
+      final si = stackIndex[id] ?? 0;
       final opt = pickingFloor && v.options.contains(id);
       specs.add(SpriteSpec(
         key: 'c$id',
         id: id,
-        pos: TableLayout.floorSlot(slot),
+        pos: TableLayout.floorSlot(slot) + Offset(si * 6.0, si * 7.0),
         w: TableLayout.floorW,
-        z: 3000 + slot,
+        z: 3000 + slot * 4 + si,
         selected: pickingFloor && selFloor == id,
         highlight: pickingFloor
             ? opt
@@ -489,6 +526,7 @@ class _GamePageState extends State<GamePage> {
         sp.spawnFaceDown = _spawnFaceDown.contains(id);
       }
       sp.delayMs = delay;
+      if (_slowMs > 0 && !sp.fast) sp.slowMs = _slowMs;
     }
     return specs;
   }
@@ -655,6 +693,55 @@ class _GamePageState extends State<GamePage> {
       _label(TableLayout.oppBoard.dx, _head(v, 1 - v.me, '상대'),
           v.turn != v.me),
       _label(TableLayout.myBoard.dx, _head(v, v.me, '나'), v.turn == v.me),
+      // 상대 돈 (누르면 상대 지갑)
+      Positioned(
+        left: 214,
+        top: 2,
+        width: 104,
+        child: ListenableBuilder(
+          listenable: s,
+          builder: (context, _) {
+            final d = s.oppWallet;
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => showOppWallet(context, s),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        d == null ? '...' : won(d.money),
+                        style: TextStyle(
+                          color: (d != null && d.money < 0)
+                              ? Colors.redAccent
+                              : Colors.lightBlueAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      '상대 지갑 보기',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white70, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
       // 내 돈 (누르면 지갑)
       Positioned(
         left: 6,
@@ -833,7 +920,27 @@ class _GamePageState extends State<GamePage> {
                   child: const Text('지갑 (대출)'),
                 ),
                 const SizedBox(height: 6),
-                for (final l in r.lines) Text(l),
+                if (r.lines.any((l) => l.contains('박')))
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 6,
+                    children: [
+                      for (final l in r.lines.where((l) => l.contains('박')))
+                        Chip(
+                          label: Text(
+                            l,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          backgroundColor: Colors.red.shade700,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                for (final l in r.lines.where((l) => !l.contains('박')))
+                  Text(l),
                 const Divider(),
                 Text('내 족보: ${_joinOrNone(r.details[v.me])}'),
                 Text('상대 족보: ${_joinOrNone(r.details[1 - v.me])}'),

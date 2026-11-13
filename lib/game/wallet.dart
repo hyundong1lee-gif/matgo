@@ -74,6 +74,44 @@ class GameRecord {
       );
 }
 
+/// 지갑과 전적을 한 번에 담은 사본. 상대에게 보내서 상대 지갑을 보여 줄 때도 쓴다.
+class WalletSnapshot {
+  const WalletSnapshot({
+    required this.money,
+    required this.debt,
+    required this.resets,
+    required this.records,
+  });
+
+  final int money;
+  final int debt;
+  final int resets; // 빚 리셋을 누른 횟수
+  final List<GameRecord> records; // 오래된 순
+
+  int get wins => records.where((r) => r.result > 0).length;
+  int get losses => records.where((r) => r.result < 0).length;
+  int get draws => records.where((r) => r.result == 0).length;
+  int get pureProfit => records.fold(0, (a, r) => a + r.delta);
+  int get bestScore =>
+      records.fold(0, (a, r) => r.result > 0 && r.points > a ? r.points : a);
+
+  Map<String, dynamic> toJson() => {
+        'money': money,
+        'debt': debt,
+        'resets': resets,
+        'records': records.map((r) => r.toJson()).toList(),
+      };
+
+  factory WalletSnapshot.fromJson(Map<String, dynamic> j) => WalletSnapshot(
+        money: j['money'] as int,
+        debt: j['debt'] as int,
+        resets: (j['resets'] as int?) ?? 0,
+        records: (j['records'] as List)
+            .map((e) => GameRecord.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 /// 이 폰에 저장되는 내 돈. 앱을 껐다 켜도 유지된다.
 class Wallet extends ChangeNotifier {
   Wallet._();
@@ -85,6 +123,7 @@ class Wallet extends ChangeNotifier {
 
   int money = kStartMoney;
   int debt = 0;
+  int resetCount = 0; // 빚 리셋을 누른 횟수
   int _lastGameId = 0;
 
   /// 가장 최근에 정산한 판의 증감액 (결과 화면 표시용)
@@ -104,6 +143,17 @@ class Wallet extends ChangeNotifier {
   int get bestScore =>
       records.fold(0, (a, r) => r.result > 0 && r.points > a ? r.points : a);
 
+  /// 상대에게 보낼 때는 최근 판만 보낸다 (메시지 크기 제한)
+  WalletSnapshot snapshot({int maxRecords = 150}) {
+    final start = records.length > maxRecords ? records.length - maxRecords : 0;
+    return WalletSnapshot(
+      money: money,
+      debt: debt,
+      resets: resetCount,
+      records: List<GameRecord>.of(records.sublist(start)),
+    );
+  }
+
   SharedPreferences? _p;
 
   Future<void> load() async {
@@ -111,6 +161,7 @@ class Wallet extends ChangeNotifier {
     final p = _p!;
     money = p.getInt('money') ?? kStartMoney;
     debt = p.getInt('debt') ?? 0;
+    resetCount = p.getInt('resets') ?? 0;
     _lastGameId = p.getInt('lastGameId') ?? 0;
     records.clear();
     for (final e in p.getStringList('records') ?? const <String>[]) {
@@ -146,6 +197,7 @@ class Wallet extends ChangeNotifier {
     if (p == null) return;
     await p.setInt('money', money);
     await p.setInt('debt', debt);
+    await p.setInt('resets', resetCount);
     await p.setInt('lastGameId', _lastGameId);
     await p.setStringList(
       'records',
@@ -205,6 +257,7 @@ class Wallet extends ChangeNotifier {
     if (!canResetDebt) return false;
     debt = 0;
     money = kStartMoney;
+    resetCount++;
     _save();
     notifyListeners();
     return true;
