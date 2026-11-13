@@ -22,7 +22,7 @@ import 'dart:typed_data';
 const int kProtocol = 4;
 
 /// 로비에 보여 주는 버전. 두 폰이 같은지 눈으로 확인하는 용도.
-const String kAppVersion = 'v5 (전적)';
+const String kAppVersion = 'v6 (인터넷)';
 
 class Msg {
   static const hello = 'hello';

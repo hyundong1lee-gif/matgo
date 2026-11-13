@@ -7,7 +7,7 @@ import 'relay.dart';
 import 'transport.dart';
 
 const String _root = 'matgo-hdlee/v1';
-const String _codeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const String _codeChars = '0123456789';
 
 String _rand(int n, String chars) {
   final r = Random.secure();
@@ -83,7 +83,7 @@ class RelayTransport implements GameTransport {
   Future<void> host() async {
     await _reset();
     _isHost = true;
-    _code = _rand(6, _codeChars);
+    _code = _rand(2, _codeChars); // 두 자리 숫자
     _log('방 코드: $_code');
     if (!await _openRelay()) return;
     _relay!.subscribe(_hostTopic);

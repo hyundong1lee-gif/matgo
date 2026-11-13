@@ -91,7 +91,7 @@ void main() {
     await host.host();
     expect(host.current, LinkState.advertising);
     final code = host.roomCode!;
-    expect(code.length, 6);
+    expect(RegExp(r'^[0-9]{2}$').hasMatch(code), true);
 
     await guest.join(Room(code.toLowerCase(), code));
     await wait(() =>
@@ -132,7 +132,7 @@ void main() {
   test('없는 방 코드는 시간이 지나면 실패', () async {
     final b = FakeBroker();
     final guest = mk(b);
-    await guest.join(const Room('ZZZZZZ', ''));
+    await guest.join(const Room('XX', ''));
     await wait(() => guest.current == LinkState.failed);
     expect(guest.current, LinkState.failed);
   });

@@ -138,17 +138,18 @@ class _LobbyPageState extends State<LobbyPage> {
               const Divider(height: 24),
               TextField(
                 controller: ctl,
-                textCapitalization: TextCapitalization.characters,
-                maxLength: 6,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 2,
                 decoration: const InputDecoration(
-                  labelText: '친구가 알려준 방 코드',
+                  labelText: '친구가 알려준 방 코드 (두 자리 숫자)',
                   border: OutlineInputBorder(),
                 ),
               ),
               FilledButton.tonal(
                 onPressed: () {
                   final c = ctl.text.trim().toUpperCase();
-                  if (c.length == 6) Navigator.of(ctx).pop((false, c));
+                  if (c.length == 2) Navigator.of(ctx).pop((false, c));
                 },
                 child: const Text('코드로 입장'),
               ),
@@ -342,9 +343,9 @@ class _LobbyPageState extends State<LobbyPage> {
                               _t.roomCode!,
                               style: const TextStyle(
                                 color: Colors.yellowAccent,
-                                fontSize: 40,
+                                fontSize: 56,
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: 6,
+                                letterSpacing: 10,
                               ),
                             ),
                           ),
