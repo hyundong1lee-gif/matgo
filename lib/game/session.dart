@@ -185,7 +185,14 @@ class MatgoSession extends ChangeNotifier {
     final delta = r.winner < 0
         ? 0
         : (r.winner == v.me ? 1 : -1) * r.points * kWonPerPoint;
-    Wallet.i.settle(v.gameId, delta);
+    Wallet.i.settle(
+      v.gameId,
+      delta,
+      result: r.winner < 0 ? 0 : (r.winner == v.me ? 1 : -1),
+      myScore: v.scores[v.me],
+      oppScore: v.scores[1 - v.me],
+      points: r.winner < 0 ? 0 : r.points,
+    );
   }
 
   @override

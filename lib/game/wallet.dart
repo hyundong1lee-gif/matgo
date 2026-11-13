@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,6 +20,43 @@ String won(int v) {
   return '${neg ? '-' : ''}$b원';
 }
 
+/// 한 판의 기록 (내 시점)
+class GameRecord {
+  final int id; // 판 시작 시각(ms)
+  final int result; // 1 승 -1 패 0 나가리
+  final int myScore; // 판이 끝났을 때 내 점수
+  final int oppScore;
+  final int points; // 승부 점수(배수 적용 후) 나가리는 0
+  final int delta; // 이 판으로 늘고 줄어든 돈
+
+  const GameRecord({
+    required this.id,
+    required this.result,
+    required this.myScore,
+    required this.oppScore,
+    required this.points,
+    required this.delta,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'r': result,
+        'm': myScore,
+        'o': oppScore,
+        'p': points,
+        'd': delta,
+      };
+
+  factory GameRecord.fromJson(Map<String, dynamic> j) => GameRecord(
+        id: j['id'] as int,
+        result: j['r'] as int,
+        myScore: j['m'] as int,
+        oppScore: j['o'] as int,
+        points: j['p'] as int,
+        delta: j['d'] as int,
+      );
+}
+
 /// 이 폰에 저장되는 내 돈. 앱을 껐다 켜도 유지된다.
 class Wallet extends ChangeNotifier {
   Wallet._();
@@ -35,6 +74,19 @@ class Wallet extends ChangeNotifier {
   int lastDelta = 0;
   int lastDeltaGameId = 0;
 
+  /// 지금까지 한 모든 판 (오래된 순)
+  final List<GameRecord> records = [];
+
+  int get wins => records.where((r) => r.result > 0).length;
+  int get losses => records.where((r) => r.result < 0).length;
+  int get draws => records.where((r) => r.result == 0).length;
+
+  /// 대출 빚 리셋과 상관없이 게임 결과만 합친 손익
+  int get pureProfit => records.fold(0, (a, r) => a + r.delta);
+
+  int get bestScore =>
+      records.fold(0, (a, r) => r.result > 0 && r.points > a ? r.points : a);
+
   SharedPreferences? _p;
 
   Future<void> load() async {
@@ -42,6 +94,12 @@ class Wallet extends ChangeNotifier {
     money = _p!.getInt('money') ?? kStartMoney;
     debt = _p!.getInt('debt') ?? 0;
     _lastGameId = _p!.getInt('lastGameId') ?? 0;
+    records.clear();
+    for (final e in _p!.getStringList('records') ?? const <String>[]) {
+      try {
+        records.add(GameRecord.fromJson(jsonDecode(e) as Map<String, dynamic>));
+      } catch (_) {}
+    }
     notifyListeners();
   }
 
@@ -51,13 +109,32 @@ class Wallet extends ChangeNotifier {
     await p.setInt('money', money);
     await p.setInt('debt', debt);
     await p.setInt('lastGameId', _lastGameId);
+    await p.setStringList(
+      'records',
+      records.map((r) => jsonEncode(r.toJson())).toList(),
+    );
   }
 
   /// 판이 끝났을 때 한 번만 정산한다. 같은 판을 다시 받아도 무시한다.
-  bool settle(int gameId, int delta) {
+  bool settle(
+    int gameId,
+    int delta, {
+    int result = 0,
+    int myScore = 0,
+    int oppScore = 0,
+    int points = 0,
+  }) {
     if (gameId == 0 || gameId == _lastGameId) return false;
     _lastGameId = gameId;
     money += delta;
+    records.add(GameRecord(
+      id: gameId,
+      result: result,
+      myScore: myScore,
+      oppScore: oppScore,
+      points: points,
+      delta: delta,
+    ));
     lastDelta = delta;
     lastDeltaGameId = gameId;
     _save();

@@ -10,6 +10,7 @@ import '../net/nearby_transport.dart';
 import '../net/permissions.dart';
 import '../net/transport.dart';
 import 'game_page.dart';
+import 'stats_page.dart';
 import 'wallet_panel.dart';
 
 /// 시작 화면: 방 만들기 / 방 찾기 / 연결 대기
@@ -150,6 +151,17 @@ class _LobbyPageState extends State<LobbyPage> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const StatsPage(),
+                        ),
+                      ),
+                      child: const Text(
+                        '전적 보기',
+                        style: TextStyle(color: Colors.white70),
                       ),
                     ),
                     const SizedBox(height: 6),

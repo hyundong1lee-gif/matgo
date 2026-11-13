@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../game/wallet.dart';
+import 'stats_page.dart';
 
 /// 내 돈과 빚을 보여 주고 대출 / 갚기 / 빚 리셋을 하는 창
 Future<void> showWallet(BuildContext context) {
@@ -49,6 +50,20 @@ class WalletPanel extends StatelessWidget {
                     color: w.debt > 0 ? Colors.red : Colors.black54,
                   ),
                 ),
+                Text(
+                  '게임으로 번 돈 ${w.pureProfit > 0 ? '+' : ''}${won(w.pureProfit)}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: w.pureProfit < 0 ? Colors.red : Colors.green.shade700,
+                  ),
+                ),
+                const Text(
+                  '(대출·빚 리셋 제외)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 10, color: Colors.black54),
+                ),
                 const SizedBox(height: 4),
                 const Text(
                   '대출은 한 번에 5,000원 갚을 땐 1.2배(6,000원)\n빚이 10,000원 이상이면 빚 리셋 가능\n(빚 0원 + 전재산 5,000원으로 초기화)',
@@ -80,9 +95,22 @@ class WalletPanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('닫기'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const StatsPage(),
+                        ),
+                      ),
+                      child: const Text('전적 보기'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('닫기'),
+                    ),
+                  ],
                 ),
               ],
             ),
