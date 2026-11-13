@@ -3,21 +3,38 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const int kStartMoney = 5000;
-const int kLoanUnit = 5000;
-const double kLoanRate = 1.2;
-const int kDebtResetAt = 10000;
-const int kWonPerPoint = 100;
+const int kStartMoney = 5000000000; // 50억
+const int kLoanUnit = 5000000000; // 한 번에 50억
+const int kDebtResetAt = 10000000000; // 100억
+const int kWonPerPoint = 100000000; // 1점당 1억
 
-String won(int v) {
-  final neg = v < 0;
-  final s = v.abs().toString();
+/// 예전 단위(5,000원 시작)에서 지금 단위로 옮길 때 곱하는 값
+const int kOldUnitScale = 1000000;
+
+String _commas(int a) {
+  final s = a.toString();
   final b = StringBuffer();
   for (var i = 0; i < s.length; i++) {
     if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
     b.write(s[i]);
   }
-  return '${neg ? '-' : ''}$b원';
+  return b.toString();
+}
+
+/// 50억원 / 1억 2,000만원 / 3,500원 처럼 읽기 쉽게 적는다.
+String won(int v) {
+  final neg = v < 0;
+  final a = v.abs();
+  final sign = neg ? '-' : '';
+  if (a < 10000) return '$sign${_commas(a)}원';
+  final eok = a ~/ 100000000;
+  final man = (a % 100000000) ~/ 10000;
+  final rest = a % 10000;
+  final parts = <String>[];
+  if (eok > 0) parts.add('${_commas(eok)}억');
+  if (man > 0) parts.add('${_commas(man)}만');
+  if (rest > 0) parts.add(_commas(rest));
+  return '$sign${parts.join(' ')}원';
 }
 
 /// 한 판의 기록 (내 시점)
@@ -91,14 +108,35 @@ class Wallet extends ChangeNotifier {
 
   Future<void> load() async {
     _p = await SharedPreferences.getInstance();
-    money = _p!.getInt('money') ?? kStartMoney;
-    debt = _p!.getInt('debt') ?? 0;
-    _lastGameId = _p!.getInt('lastGameId') ?? 0;
+    final p = _p!;
+    money = p.getInt('money') ?? kStartMoney;
+    debt = p.getInt('debt') ?? 0;
+    _lastGameId = p.getInt('lastGameId') ?? 0;
     records.clear();
-    for (final e in _p!.getStringList('records') ?? const <String>[]) {
+    for (final e in p.getStringList('records') ?? const <String>[]) {
       try {
         records.add(GameRecord.fromJson(jsonDecode(e) as Map<String, dynamic>));
       } catch (_) {}
+    }
+    // 예전 단위로 저장된 돈 빚 전적은 100만 배로 바꿔 준다 (한 번만)
+    if (p.getInt('unit') == null) {
+      if (p.containsKey('money')) {
+        money *= kOldUnitScale;
+        debt *= kOldUnitScale;
+        for (var i = 0; i < records.length; i++) {
+          final r = records[i];
+          records[i] = GameRecord(
+            id: r.id,
+            result: r.result,
+            myScore: r.myScore,
+            oppScore: r.oppScore,
+            points: r.points,
+            delta: r.delta * kOldUnitScale,
+          );
+        }
+      }
+      await p.setInt('unit', 2);
+      await _save();
     }
     notifyListeners();
   }
@@ -145,7 +183,7 @@ class Wallet extends ChangeNotifier {
   /// 대출은 한 번에 5000원 빚은 1.2배로 늘어난다.
   void borrow() {
     money += kLoanUnit;
-    debt += (kLoanUnit * kLoanRate).round();
+    debt += kLoanUnit * 6 ~/ 5; // 1.2배
     _save();
     notifyListeners();
   }

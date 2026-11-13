@@ -65,8 +65,8 @@ class WalletPanel extends StatelessWidget {
                   style: TextStyle(fontSize: 10, color: Colors.black54),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  '대출은 한 번에 5,000원 갚을 땐 1.2배(6,000원)\n빚이 10,000원 이상이면 빚 리셋 가능\n(빚 0원 + 전재산 5,000원으로 초기화)',
+                Text(
+                  '대출은 한 번에 ${won(kLoanUnit)} 갚을 땐 1.2배(${won(kLoanUnit * 6 ~/ 5)})\n빚이 ${won(kDebtResetAt)} 이상이면 빚 리셋 가능\n(빚 0원 + 전재산 ${won(kStartMoney)}으로 초기화)',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11, color: Colors.black54),
                 ),
@@ -78,7 +78,7 @@ class WalletPanel extends StatelessWidget {
                   children: [
                     FilledButton(
                       onPressed: w.borrow,
-                      child: const Text('5,000원 대출'),
+                      child: Text('${won(kLoanUnit)} 대출'),
                     ),
                     FilledButton.tonal(
                       onPressed: (w.debt > 0 && w.money > 0) ? w.repay : null,
@@ -125,7 +125,7 @@ class WalletPanel extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('빚 리셋'),
-        content: const Text('빚이 0원이 되지만 전재산도 5,000원으로 바뀌어. 진행할까?'),
+        content: Text('빚이 0원이 되지만 전재산도 ${won(kStartMoney)}으로 바뀌어. 진행할까?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),

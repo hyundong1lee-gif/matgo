@@ -21,6 +21,25 @@ class BoardSlot {
   final String kind; // gwang yeol hong cheong cho tti pi
 }
 
+/// 먹은 패 한 칸의 크기 설정
+class CapStyle {
+  const CapStyle({
+    required this.w,
+    required this.step,
+    required this.rowH,
+    required this.piX,
+    required this.piStep,
+    required this.width,
+  });
+
+  final double w; // 카드 너비
+  final double step; // 카드 가로 간격
+  final double rowH; // 줄 간격
+  final double piX; // 피 구역 시작 위치 (보드 왼쪽 기준)
+  final double piStep; // 피 가로 간격
+  final double width; // 보드 전체 너비
+}
+
 /// 게임판 좌표 계산. 모든 좌표는 900 x 405 가상 화면 기준이다.
 /// 실제 화면에서는 이 판 전체를 비율에 맞춰 줄여서 보여 준다.
 class TableLayout {
@@ -35,14 +54,18 @@ class TableLayout {
   static const double oppW = 22;
   static const double capW = 19;
 
+  /// 상대가 먹은 패는 작게 내가 먹은 패는 크게 보여 준다.
+  static const CapStyle oppCap = CapStyle(
+    w: 19, step: 21, rowH: 33, piX: 72, piStep: 21, width: 198);
+  static const CapStyle myCap = CapStyle(
+    w: 25, step: 27, rowH: 40, piX: 88, piStep: 23, width: 206);
+
   static const Offset deck = Offset(218, 46);
   static const Offset playSpot = Offset(425, 150);
   static const Offset oppBoard = Offset(6, 28);
-  static const Offset myBoard = Offset(694, 28);
+  static const Offset myBoard = Offset(692, 28);
 
   static const int floorCols = 8;
-  static const double _step = 21; // 먹은 패 가로 간격
-  static const double _rowH = 33; // 먹은 패 줄 간격
 
   static double h(double w) => w * 1.55;
 
@@ -67,12 +90,13 @@ class TableLayout {
     return Offset(275 + c * 52, 46 + r * 76);
   }
 
-  static double _baseY(Offset o) => o.dy + 2 * _rowH + 6;
+  static double _baseY(Offset o, CapStyle st) => o.dy + 2 * st.rowH + 6;
 
   /// 먹은 패 배치. 겹치지 않게 줄을 나눈다.
   /// 광 한 줄, 열끗 한 줄, 띠는 홍단 청단 초단 기타 순으로 줄을 바꾸고,
   /// 피는 피 값의 합이 5가 될 때마다 줄을 바꾼다(쌍피는 2로 센다).
-  static Map<int, Offset> captured(List<int> ids, Offset o) {
+  static Map<int, Offset> captured(List<int> ids, Offset o,
+      {CapStyle style = oppCap}) {
     final out = <int, Offset>{};
     final gwang = <int>[];
     final yeol = <int>[];
@@ -113,20 +137,28 @@ class TableLayout {
       }
     }
 
-    void row(List<int> list, double x, double y) {
+    // 칸이 모자라면 간격을 줄여서 살짝 겹치게 한다
+    void row(List<int> list, double x, double y, double maxW) {
       list.sort();
+      var step = style.step;
+      if (list.length > 1) {
+        final fit = (maxW - style.w) / (list.length - 1);
+        if (fit < step) step = fit;
+      }
       for (var i = 0; i < list.length; i++) {
-        out[list[i]] = Offset(x + i * _step, y);
+        out[list[i]] = Offset(x + i * step, y);
       }
     }
 
-    final baseY = _baseY(o);
-    row(gwang, o.dx, o.dy);
-    row(yeol, o.dx, o.dy + _rowH);
-    row(hong, o.dx, baseY);
-    row(cheong, o.dx, baseY + _rowH);
-    row(cho, o.dx, baseY + 2 * _rowH);
-    row(other, o.dx, baseY + 3 * _rowH);
+    final rh = style.rowH;
+    final baseY = _baseY(o, style);
+    final ttiW = style.piX - 4;
+    row(gwang, o.dx, o.dy, style.width);
+    row(yeol, o.dx, o.dy + rh, style.width);
+    row(hong, o.dx, baseY, ttiW);
+    row(cheong, o.dx, baseY + rh, ttiW);
+    row(cho, o.dx, baseY + 2 * rh, ttiW);
+    row(other, o.dx, baseY + 3 * rh, ttiW);
 
     pi.sort((a, b) {
       final d = allCards[b].piValue - allCards[a].piValue;
@@ -142,7 +174,7 @@ class TableLayout {
         col = 0;
         sum = 0;
       }
-      out[id] = Offset(o.dx + 72 + col * _step, baseY + r * _rowH);
+      out[id] = Offset(o.dx + style.piX + col * style.piStep, baseY + r * rh);
       sum += v;
       col++;
     }
@@ -150,17 +182,20 @@ class TableLayout {
   }
 
   /// 먹은 패 칸의 배경
-  static List<BoardSlot> slots(Offset o) {
-    final baseY = _baseY(o);
-    final ch = capW * 1.55 + 4;
+  static List<BoardSlot> slots(Offset o, {CapStyle style = oppCap}) {
+    final rh = style.rowH;
+    final baseY = _baseY(o, style);
+    final ch = style.w * 1.55 + 4;
+    final ttiW = style.piX - 4;
     return [
-      BoardSlot(o.dx - 2, o.dy - 2, 198, ch, '광', 'gwang'),
-      BoardSlot(o.dx - 2, o.dy + _rowH - 2, 198, ch, '열끗', 'yeol'),
-      BoardSlot(o.dx - 2, baseY - 2, 68, ch, '홍단', 'hong'),
-      BoardSlot(o.dx - 2, baseY + _rowH - 2, 68, ch, '청단', 'cheong'),
-      BoardSlot(o.dx - 2, baseY + 2 * _rowH - 2, 68, ch, '초단', 'cho'),
-      BoardSlot(o.dx - 2, baseY + 3 * _rowH - 2, 68, ch, '띠', 'tti'),
-      BoardSlot(o.dx + 70, baseY - 2, 110, 6 * _rowH - 3, '피', 'pi'),
+      BoardSlot(o.dx - 2, o.dy - 2, style.width, ch, '광', 'gwang'),
+      BoardSlot(o.dx - 2, o.dy + rh - 2, style.width, ch, '열끗', 'yeol'),
+      BoardSlot(o.dx - 2, baseY - 2, ttiW, ch, '홍단', 'hong'),
+      BoardSlot(o.dx - 2, baseY + rh - 2, ttiW, ch, '청단', 'cheong'),
+      BoardSlot(o.dx - 2, baseY + 2 * rh - 2, ttiW, ch, '초단', 'cho'),
+      BoardSlot(o.dx - 2, baseY + 3 * rh - 2, ttiW, ch, '띠', 'tti'),
+      BoardSlot(o.dx + style.piX - 2, baseY - 2, style.width - style.piX - 2,
+          5 * rh - 3, '피', 'pi'),
     ];
   }
 }

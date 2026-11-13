@@ -1,5 +1,8 @@
 /// 게임 코드는 이 인터페이스만 본다.
 /// 나중에 가짜 상대(봇)를 만들 때도 이 인터페이스를 구현하면 된다.
+/// 연결이 끊긴 뒤 다시 붙기를 기다려 주는 시간
+const Duration kReconnectWindow = Duration(seconds: 60);
+
 enum LinkState {
   idle,
   advertising,
@@ -25,6 +28,9 @@ abstract class GameTransport {
   Stream<String> get logs;
 
   LinkState get current;
+
+  /// 인터넷 대전의 방 코드 (근처 연결은 null)
+  String? get roomCode;
   bool get isHost;
 
   Future<void> host();

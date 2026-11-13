@@ -8,7 +8,6 @@ import 'transport.dart';
 
 const String _serviceId = 'com.example.matgo';
 const String _roomPrefix = 'MATGO-';
-const Duration kReconnectWindow = Duration(seconds: 60);
 const Duration _pingEvery = Duration(seconds: 3);
 const Duration _deadAfter = Duration(seconds: 10);
 const Duration _seekRetry = Duration(seconds: 6);
@@ -56,6 +55,8 @@ class NearbyTransport implements GameTransport {
   LinkState get current => _state;
   @override
   bool get isHost => _isHost;
+  @override
+  String? get roomCode => null;
 
   // ---------------------------------------------------------------- 공개 API
 

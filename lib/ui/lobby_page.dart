@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../game/session.dart';
 import '../game/wallet.dart';
 import '../net/messages.dart';
-import '../net/nearby_transport.dart';
+import '../net/mqtt_relay.dart';
 import '../net/permissions.dart';
+import '../net/relay_transport.dart';
 import '../net/transport.dart';
 import 'game_page.dart';
 import 'stats_page.dart';
@@ -31,15 +33,28 @@ class _LobbyPageState extends State<LobbyPage> {
   PermIssue issue = PermIssue.none;
   bool inGame = false;
 
+  late GameTransport _t;
+
   @override
   void initState() {
     super.initState();
-    state = widget.t.current;
-    subs.add(widget.t.state.listen(_onState));
-    subs.add(widget.t.rooms.listen((r) {
+    _t = widget.t;
+    _listen();
+  }
+
+  /// 지금 쓰는 통신(근처 연결 또는 인터넷)의 상태를 듣는다
+  void _listen() {
+    for (final s in subs) {
+      s.cancel();
+    }
+    subs.clear();
+    state = _t.current;
+    rooms = [];
+    subs.add(_t.state.listen(_onState));
+    subs.add(_t.rooms.listen((r) {
       if (mounted) setState(() => rooms = r);
     }));
-    subs.add(widget.t.logs.listen((l) {
+    subs.add(_t.logs.listen((l) {
       if (!mounted) return;
       final now = DateTime.now().toString().substring(11, 19);
       setState(() {
@@ -65,9 +80,17 @@ class _LobbyPageState extends State<LobbyPage> {
     }
   }
 
+  /// 근처 연결(블루투스)로 되돌린다
+  void _useNearby() {
+    if (_t == widget.t) return;
+    _t = widget.t;
+    _listen();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _enterGame() async {
     inGame = true;
-    final t = widget.t;
+    final t = _t;
     final session = t.isHost ? MatgoSession.host(t) : MatgoSession.guest(t);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -76,24 +99,88 @@ class _LobbyPageState extends State<LobbyPage> {
     );
     session.dispose();
     await t.close();
+    _useNearby();
     if (mounted) setState(() => inGame = false);
   }
 
+  Future<void> _cancel() async {
+    await _t.close();
+    _useNearby();
+  }
+
+  Future<void> _startNet(bool host, [String code = '']) async {
+    final nt = RelayTransport(() => MqttRelay());
+    _t = nt;
+    _listen();
+    setState(() => issue = PermIssue.none);
+    if (host) {
+      await nt.host();
+    } else {
+      await nt.join(Room(code, code));
+    }
+  }
+
+  Future<void> _netDialog() async {
+    final ctl = TextEditingController();
+    final r = await showDialog<(bool, String)>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('인터넷 대전'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop((true, '')),
+                child: const Text('방 만들기 (코드 받기)'),
+              ),
+              const Divider(height: 24),
+              TextField(
+                controller: ctl,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  labelText: '친구가 알려준 방 코드',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              FilledButton.tonal(
+                onPressed: () {
+                  final c = ctl.text.trim().toUpperCase();
+                  if (c.length == 6) Navigator.of(ctx).pop((false, c));
+                },
+                child: const Text('코드로 입장'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (r == null || !mounted) return;
+    await _startNet(r.$1, r.$2);
+  }
+
   Future<void> _start(bool host) async {
+    _useNearby();
     final r = await checkNearbyPermissions();
     if (!mounted) return;
     setState(() => issue = r);
     if (r != PermIssue.none) return;
     if (host) {
-      await widget.t.host();
+      await _t.host();
     } else {
-      await widget.t.startSearch();
+      await _t.startSearch();
     }
   }
 
   String get _stateText {
     if (state == LinkState.idle) return '대기 중';
-    if (state == LinkState.advertising) return '방이 열렸어. 친구가 들어오길 기다리는 중...';
+    if (state == LinkState.advertising) {
+      return _t.roomCode != null
+          ? '방이 열렸어. 코드를 친구에게 알려줘'
+          : '방이 열렸어. 친구가 들어오길 기다리는 중...';
+    }
     if (state == LinkState.discovering) return '방을 찾는 중...';
     if (state == LinkState.connecting) return '연결 중...';
     if (state == LinkState.connected) return '연결됨';
@@ -174,10 +261,15 @@ class _LobbyPageState extends State<LobbyPage> {
                       onPressed: canStart ? () => _start(false) : null,
                       child: const Text('방 찾기'),
                     ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonal(
+                      onPressed: canStart ? _netDialog : null,
+                      child: const Text('인터넷으로 하기'),
+                    ),
                     if (!canStart) ...[
                       const SizedBox(height: 8),
                       OutlinedButton(
-                        onPressed: widget.t.close,
+                        onPressed: _cancel,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
                         ),
@@ -236,14 +328,39 @@ class _LobbyPageState extends State<LobbyPage> {
                             dense: true,
                             title: Text(r.name),
                             trailing: const Icon(Icons.login),
-                            onTap: () => widget.t.join(r),
+                            onTap: () => _t.join(r),
                           ),
                         ),
+                    ] else if (_t.roomCode != null) ...[
+                      if (state == LinkState.advertising)
+                        InkWell(
+                          onTap: () => Clipboard.setData(
+                            ClipboardData(text: _t.roomCode!),
+                          ),
+                          child: Center(
+                            child: Text(
+                              _t.roomCode!,
+                              style: const TextStyle(
+                                color: Colors.yellowAccent,
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 6,
+                              ),
+                            ),
+                          ),
+                        ),
+                      const Text(
+                        '이 코드를 친구에게 알려줘 (누르면 복사)\n친구는 "인터넷으로 하기"에서 코드로 입장하면 돼',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
                     ] else
                       const Text(
+                        '[근처 연결]\n'
                         '1. 한 명이 "방 만들기"를 누른다\n'
                         '2. 다른 한 명이 "방 찾기"를 누르고 방을 고른다\n'
-                        '3. 두 폰 모두 블루투스와 위치(GPS)가 켜져 있어야 해',
+                        '3. 두 폰 모두 블루투스와 위치(GPS)가 켜져 있어야 해\n\n'
+                        '[인터넷] 멀리 있는 친구와는 "인터넷으로 하기"를 눌러 방 코드로 만나',
                         style: TextStyle(color: Colors.white70),
                       ),
                     const Spacer(),

@@ -36,7 +36,7 @@ jobs:
 
       - name: 패키지 추가
         working-directory: app
-        run: flutter pub add nearby_connections shared_preferences permission_handler:12.0.1 "override:permission_handler_android:12.0.10"
+        run: flutter pub add nearby_connections shared_preferences mqtt_client permission_handler:12.0.1 "override:permission_handler_android:12.0.10"
 
       - name: 권한 추가
         run: python3 tools/patch_manifest.py app/android/app/src/main/AndroidManifest.xml android_manifest_permissions.xml

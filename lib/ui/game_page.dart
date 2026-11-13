@@ -8,7 +8,6 @@ import '../game/matgo_game.dart';
 import '../game/session.dart';
 import '../game/view_state.dart';
 import '../game/wallet.dart';
-import '../net/nearby_transport.dart';
 import '../net/transport.dart';
 import 'card_sprite.dart';
 import 'table_layout.dart';
@@ -407,13 +406,14 @@ class _GamePageState extends State<GamePage> {
     for (var side = 0; side < 2; side++) {
       final owner = side == 0 ? 1 - v.me : v.me;
       final origin = side == 0 ? TableLayout.oppBoard : TableLayout.myBoard;
-      final pos = TableLayout.captured(v.captured[owner], origin);
+      final st = side == 0 ? TableLayout.oppCap : TableLayout.myCap;
+      final pos = TableLayout.captured(v.captured[owner], origin, style: st);
       pos.forEach((id, p) {
         specs.add(SpriteSpec(
           key: 'c$id',
           id: id,
           pos: p,
-          w: TableLayout.capW,
+          w: st.w,
           z: 2000 + k,
         ));
         shown.add(id);
@@ -514,8 +514,10 @@ class _GamePageState extends State<GamePage> {
 
   List<Widget> _boardBackgrounds() {
     final out = <Widget>[];
-    for (final o in [TableLayout.oppBoard, TableLayout.myBoard]) {
-      for (final sl in TableLayout.slots(o)) {
+    for (final side in [0, 1]) {
+      final o = side == 0 ? TableLayout.oppBoard : TableLayout.myBoard;
+      final st = side == 0 ? TableLayout.oppCap : TableLayout.myCap;
+      for (final sl in TableLayout.slots(o, style: st)) {
         out.add(Positioned(
           left: sl.left,
           top: sl.top,
@@ -657,7 +659,7 @@ class _GamePageState extends State<GamePage> {
       Positioned(
         left: 6,
         top: 346,
-        width: 140,
+        width: 148,
         child: ListenableBuilder(
           listenable: Wallet.i,
           builder: (context, _) => GestureDetector(
@@ -673,18 +675,24 @@ class _GamePageState extends State<GamePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    won(Wallet.i.money),
-                    style: TextStyle(
-                      color: Wallet.i.money < 0
-                          ? Colors.redAccent
-                          : Colors.yellowAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      won(Wallet.i.money),
+                      style: TextStyle(
+                        color: Wallet.i.money < 0
+                            ? Colors.redAccent
+                            : Colors.yellowAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                   Text(
                     Wallet.i.debt > 0 ? '빚 ${won(Wallet.i.debt)}' : '지갑 열기',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ],
