@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../game/session.dart';
+import '../game/wallet.dart';
 import '../net/messages.dart';
 import '../net/nearby_transport.dart';
 import '../net/permissions.dart';
 import '../net/transport.dart';
 import 'game_page.dart';
+import 'wallet_panel.dart';
 
 /// 시작 화면: 방 만들기 / 방 찾기 / 연결 대기
 class LobbyPage extends StatefulWidget {
@@ -135,7 +137,22 @@ class _LobbyPageState extends State<LobbyPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 10),
+                    ListenableBuilder(
+                      listenable: Wallet.i,
+                      builder: (context, _) => TextButton(
+                        onPressed: () => showWallet(context),
+                        child: Text(
+                          '내 지갑 ${won(Wallet.i.money)}'
+                          '${Wallet.i.debt > 0 ? ' · 빚 ${won(Wallet.i.debt)}' : ''}',
+                          style: const TextStyle(
+                            color: Colors.yellowAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
                     FilledButton(
                       onPressed: canStart ? () => _start(true) : null,
                       child: const Text('방 만들기'),

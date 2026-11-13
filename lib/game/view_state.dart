@@ -6,6 +6,7 @@ List<int> _ints(dynamic v) => (v as List).map((e) => e as int).toList();
 
 /// 한 플레이어 시점의 게임 상태. 상대 패와 남은 더미의 내용은 들어 있지 않다.
 class ViewState {
+  final int gameId; // 판마다 다른 번호 (돈 정산을 한 번만 하려고)
   final int me; // 0 방장 1 참가자
   final int seq;
   final int turn;
@@ -28,6 +29,7 @@ class ViewState {
   int? get lastHand => lastHands.isEmpty ? null : lastHands.first;
 
   const ViewState({
+    required this.gameId,
     required this.me,
     required this.seq,
     required this.turn,
@@ -48,8 +50,9 @@ class ViewState {
     required this.result,
   });
 
-  factory ViewState.of(MatgoGame g, int me, int seq) {
+  factory ViewState.of(MatgoGame g, int me, int seq, {int gameId = 0}) {
     return ViewState(
+      gameId: gameId,
       me: me,
       seq: seq,
       turn: g.turn,
@@ -73,6 +76,7 @@ class ViewState {
 
   Map<String, dynamic> toJson() => {
         'proto': kProtocol,
+        'gameId': gameId,
         'me': me,
         'seq': seq,
         'turn': turn,
@@ -95,6 +99,7 @@ class ViewState {
 
   factory ViewState.fromJson(Map<String, dynamic> j) {
     return ViewState(
+      gameId: j['gameId'] as int,
       me: j['me'] as int,
       seq: j['seq'] as int,
       turn: j['turn'] as int,

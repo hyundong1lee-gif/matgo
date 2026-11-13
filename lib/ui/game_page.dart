@@ -7,10 +7,12 @@ import '../game/cards.dart';
 import '../game/matgo_game.dart';
 import '../game/session.dart';
 import '../game/view_state.dart';
+import '../game/wallet.dart';
 import '../net/nearby_transport.dart';
 import '../net/transport.dart';
 import 'card_sprite.dart';
 import 'table_layout.dart';
+import 'wallet_panel.dart';
 
 String eventText(GameEvent e, int me) {
   final who = e.p == me ? '나' : '상대';
@@ -651,6 +653,46 @@ class _GamePageState extends State<GamePage> {
       _label(TableLayout.oppBoard.dx, _head(v, 1 - v.me, '상대'),
           v.turn != v.me),
       _label(TableLayout.myBoard.dx, _head(v, v.me, '나'), v.turn == v.me),
+      // 내 돈 (누르면 지갑)
+      Positioned(
+        left: 6,
+        top: 346,
+        width: 140,
+        child: ListenableBuilder(
+          listenable: Wallet.i,
+          builder: (context, _) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showWallet(context),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    won(Wallet.i.money),
+                    style: TextStyle(
+                      color: Wallet.i.money < 0
+                          ? Colors.redAccent
+                          : Colors.yellowAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    Wallet.i.debt > 0 ? '빚 ${won(Wallet.i.debt)}' : '지갑 열기',
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
       // 남은 더미 장수
       Positioned(
         left: TableLayout.deck.dx,
@@ -687,7 +729,7 @@ class _GamePageState extends State<GamePage> {
         ),
       Positioned(
         left: 215,
-        top: 272,
+        top: 250,
         width: 470,
         child: IgnorePointer(
           child: Text(
@@ -699,9 +741,9 @@ class _GamePageState extends State<GamePage> {
       ),
       Positioned(
         left: 215,
-        top: 298,
+        top: 272,
         width: 470,
-        height: 38,
+        height: 36,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: buttons,
@@ -760,6 +802,28 @@ class _GamePageState extends State<GamePage> {
                 ),
                 if (r.winner >= 0)
                   Text('${r.points}점', style: const TextStyle(fontSize: 22)),
+                ListenableBuilder(
+                  listenable: Wallet.i,
+                  builder: (context, _) {
+                    final w = Wallet.i;
+                    final d = w.lastDeltaGameId == v.gameId ? w.lastDelta : 0;
+                    final sign = d > 0 ? '+' : '';
+                    return Text(
+                      r.winner < 0
+                          ? '돈 이동 없음 · 잔액 ${won(w.money)}'
+                          : '$sign${won(d)} · 잔액 ${won(w.money)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: d < 0 ? Colors.red : Colors.green.shade700,
+                      ),
+                    );
+                  },
+                ),
+                TextButton(
+                  onPressed: () => showWallet(context),
+                  child: const Text('지갑 (대출)'),
+                ),
                 const SizedBox(height: 6),
                 for (final l in r.lines) Text(l),
                 const Divider(),

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../net/messages.dart';
 import '../net/transport.dart';
 import 'matgo_game.dart';
+import 'wallet.dart';
 import 'view_state.dart';
 
 /// 게임 상태와 통신을 이어 주는 층.
@@ -16,6 +17,7 @@ class MatgoSession extends ChangeNotifier {
   MatgoGame? _game;
   ViewState? view;
   int _seq = 0;
+  int _gameId = 0;
   StreamSubscription<Map<String, dynamic>>? _sub;
   Timer? _readyTimer;
 
@@ -24,6 +26,7 @@ class MatgoSession extends ChangeNotifier {
 
   MatgoSession.host(this.t) : isHost = true {
     _game = MatgoGame(first: 0);
+    _gameId = DateTime.now().millisecondsSinceEpoch;
     _sub = t.messages.listen(_onMsg);
     _publish();
   }
@@ -142,6 +145,7 @@ class MatgoSession extends ChangeNotifier {
           }
           try {
             view = ViewState.fromJson(m);
+            _settle(view!);
             versionMismatch = false;
           } catch (_) {
             versionMismatch = true;
@@ -161,15 +165,27 @@ class MatgoSession extends ChangeNotifier {
     final g = _game!;
     if (g.phase != Phase.ended) return;
     _game = MatgoGame(first: g.nextFirst());
+    _gameId = DateTime.now().millisecondsSinceEpoch;
     _publish();
   }
 
   void _publish() {
     final g = _game!;
     _seq++;
-    view = ViewState.of(g, 0, _seq);
+    view = ViewState.of(g, 0, _seq, gameId: _gameId);
+    _settle(view!);
     notifyListeners();
-    t.send(Msg.state, ViewState.of(g, 1, _seq).toJson());
+    t.send(Msg.state, ViewState.of(g, 1, _seq, gameId: _gameId).toJson());
+  }
+
+  /// 판이 끝나면 이긴 사람 점수 x 100원을 진 사람이 낸다. 나가리는 이동 없음.
+  void _settle(ViewState v) {
+    final r = v.result;
+    if (v.phase != Phase.ended || r == null) return;
+    final delta = r.winner < 0
+        ? 0
+        : (r.winner == v.me ? 1 : -1) * r.points * kWonPerPoint;
+    Wallet.i.settle(v.gameId, delta);
   }
 
   @override

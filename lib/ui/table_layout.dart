@@ -30,7 +30,7 @@ class TableLayout {
   static const double height = 405;
 
   // 카드 크기 (너비 기준, 높이는 너비 x 1.55)
-  static const double handW = 40;
+  static const double handW = 54;
   static const double floorW = 44;
   static const double oppW = 22;
   static const double capW = 19;
@@ -48,9 +48,9 @@ class TableLayout {
 
   /// 내 손패 i번째 위치 (n장을 가운데 정렬)
   static Offset handPos(int i, int n) {
-    const step = 45.0;
+    const step = 58.0;
     final total = (n - 1) * step + handW;
-    return Offset(450 - total / 2 + i * step, 341);
+    return Offset(450 - total / 2 + i * step, 320);
   }
 
   /// 상대 손패 뒷면 i번째 위치

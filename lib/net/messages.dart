@@ -19,10 +19,10 @@ import 'dart:typed_data';
 /// | new_game      | 참가자 → 방장   | -                 |
 /// | _resumed      | 내부 이벤트     | 재연결 성공 알림  |
 /// 두 폰의 앱 버전이 다르면 게임이 어긋나므로 통신 규칙이 바뀔 때마다 올린다.
-const int kProtocol = 3;
+const int kProtocol = 4;
 
 /// 로비에 보여 주는 버전. 두 폰이 같은지 눈으로 확인하는 용도.
-const String kAppVersion = 'v3 (카드 뒤집기 단계 진행)';
+const String kAppVersion = 'v4 (돈·대출)';
 
 class Msg {
   static const hello = 'hello';
