@@ -289,9 +289,10 @@ class _LobbyPageState extends State<LobbyPage> {
             Expanded(
               flex: 4,
               child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: SingleChildScrollView(
+                  child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
@@ -299,7 +300,7 @@ class _LobbyPageState extends State<LobbyPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 30,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -316,44 +317,6 @@ class _LobbyPageState extends State<LobbyPage> {
                       style: TextStyle(color: Colors.white54, fontSize: 12),
                     ),
                     const SizedBox(height: 10),
-                    ListenableBuilder(
-                      listenable: Wallet.i,
-                      builder: (context, _) => TextButton(
-                        onPressed: () => showWallet(context),
-                        child: Text(
-                          '내 지갑 ${won(Wallet.i.money)}'
-                          '${Wallet.i.debt > 0 ? ' · 빚 ${won(Wallet.i.debt)}' : ''}',
-                          style: const TextStyle(
-                            color: Colors.yellowAccent,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    ListenableBuilder(
-                      listenable: Wallet.i,
-                      builder: (context, _) => TextButton(
-                        onPressed: _editName,
-                        child: Text(
-                          Wallet.i.name.isEmpty
-                              ? '이름 정하기'
-                              : '이름: ${Wallet.i.name} (바꾸기)',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const StatsPage(),
-                        ),
-                      ),
-                      child: const Text(
-                        '전적 보기',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
                     FilledButton(
                       onPressed: canStart ? () => _start(true) : null,
                       child: const Text('방 만들기'),
@@ -367,6 +330,49 @@ class _LobbyPageState extends State<LobbyPage> {
                     FilledButton.tonal(
                       onPressed: canStart ? _netDialog : null,
                       child: const Text('인터넷으로 하기'),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      children: [
+                        ListenableBuilder(
+                          listenable: Wallet.i,
+                          builder: (context, _) => TextButton(
+                            onPressed: () => showWallet(context),
+                            child: Text(
+                              '지갑 ${won(Wallet.i.money)}'
+                              '${Wallet.i.debt > 0 ? ' · 빚 ${won(Wallet.i.debt)}' : ''}',
+                              style: const TextStyle(
+                                color: Colors.yellowAccent,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        ListenableBuilder(
+                          listenable: Wallet.i,
+                          builder: (context, _) => TextButton(
+                            onPressed: _editName,
+                            child: Text(
+                              Wallet.i.name.isEmpty
+                                  ? '이름 정하기'
+                                  : '이름: ${Wallet.i.name}',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const StatsPage(),
+                            ),
+                          ),
+                          child: const Text(
+                            '전적 보기',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      ],
                     ),
                     if (!canStart) ...[
                       const SizedBox(height: 8),
@@ -397,6 +403,7 @@ class _LobbyPageState extends State<LobbyPage> {
                       ),
                     ],
                   ],
+                  ),
                 ),
               ),
             ),
