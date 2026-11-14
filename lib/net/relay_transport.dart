@@ -58,7 +58,6 @@ class RelayTransport implements GameTransport {
   LinkState _state = LinkState.idle;
   bool _isHost = false;
   bool _closed = false;
-  bool _everConnected = false; // 참가자: 방장과 한 번이라도 연결됨
   bool _everFull = false; // 방장: 모든 자리가 한 번이라도 찼음
   int _players = 2;
   int _mySeat = 0;
@@ -375,7 +374,6 @@ class RelayTransport implements GameTransport {
   }
 
   void _onWelcome(Map<String, dynamic> m) {
-    _everConnected = true;
     _mySeat = (m['seat'] as int?) ?? 1;
     _players = (m['players'] as int?) ?? 2;
     _helloTimer?.cancel();
@@ -445,7 +443,6 @@ class RelayTransport implements GameTransport {
   Future<void> _reset() async {
     await _teardown();
     _closed = false;
-    _everConnected = false;
     _everFull = false;
     _peers.clear();
     _code = '';

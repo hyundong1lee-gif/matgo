@@ -386,7 +386,7 @@ class _LobbyPageState extends State<LobbyPage> {
                             ),
                           ),
                         ),
-                      const Text(
+                      Text(
                         '이 코드를 친구에게 알려줘 (누르면 복사)\n친구는 "인터넷으로 하기"에서 코드로 입장하면 돼\n${_t.players}명 방 · 지금 ${_t.joined + 1}명',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white70, fontSize: 12),
