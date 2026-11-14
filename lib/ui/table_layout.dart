@@ -60,6 +60,12 @@ class TableLayout {
   static const CapStyle myCap = CapStyle(
     w: 25, step: 27, rowH: 40, piX: 88, piStep: 23, width: 206);
 
+  /// 3인 대전에서 두 상대의 먹은 패는 더 작게 왼쪽에 위아래로 놓는다.
+  static const CapStyle oppCap3 = CapStyle(
+    w: 17, step: 19, rowH: 27, piX: 62, piStep: 19, width: 160);
+  static const List<Offset> oppBoards3 = [Offset(6, 24), Offset(6, 212)];
+  static const double oppW3 = 18;
+
   static const Offset deck = Offset(218, 46);
   static const Offset playSpot = Offset(425, 150);
   static const Offset oppBoard = Offset(6, 28);
@@ -82,6 +88,15 @@ class TableLayout {
     final total = (n - 1) * step + oppW;
     return Offset(450 - total / 2 + i * step, 4);
   }
+
+  /// 3인 대전에서 상대 손패 뒷면 위치. group 0 은 왼쪽 1 은 오른쪽 묶음.
+  static Offset oppBackPos3(int group, int i, int n) {
+    const step = 20.0;
+    return Offset((group == 0 ? 268.0 : 516.0) + i * step, 4);
+  }
+
+  /// 3인 대전에서 상대 지갑 배지의 왼쪽 위치
+  static double walletX3(int group) => group == 0 ? 172 : 420;
 
   /// 바닥 칸 번호의 위치
   static Offset floorSlot(int slot) {

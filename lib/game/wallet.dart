@@ -43,6 +43,7 @@ class GameRecord {
   final int result; // 1 승 -1 패 0 나가리
   final int myScore; // 판이 끝났을 때 내 점수
   final int oppScore;
+  final int oppScore2; // 3인일 때 두 번째 상대 점수 (2인은 -1)
   final int points; // 승부 점수(배수 적용 후) 나가리는 0
   final int delta; // 이 판으로 늘고 줄어든 돈
 
@@ -51,6 +52,7 @@ class GameRecord {
     required this.result,
     required this.myScore,
     required this.oppScore,
+    this.oppScore2 = -1,
     required this.points,
     required this.delta,
   });
@@ -60,6 +62,7 @@ class GameRecord {
         'r': result,
         'm': myScore,
         'o': oppScore,
+        'o2': oppScore2,
         'p': points,
         'd': delta,
       };
@@ -69,6 +72,7 @@ class GameRecord {
         result: j['r'] as int,
         myScore: j['m'] as int,
         oppScore: j['o'] as int,
+        oppScore2: (j['o2'] as int?) ?? -1,
         points: j['p'] as int,
         delta: j['d'] as int,
       );
@@ -181,6 +185,7 @@ class Wallet extends ChangeNotifier {
             result: r.result,
             myScore: r.myScore,
             oppScore: r.oppScore,
+            oppScore2: r.oppScore2,
             points: r.points,
             delta: r.delta * kOldUnitScale,
           );
@@ -212,6 +217,7 @@ class Wallet extends ChangeNotifier {
     int result = 0,
     int myScore = 0,
     int oppScore = 0,
+    int oppScore2 = -1,
     int points = 0,
   }) {
     if (gameId == 0 || gameId == _lastGameId) return false;
@@ -222,6 +228,7 @@ class Wallet extends ChangeNotifier {
       result: result,
       myScore: myScore,
       oppScore: oppScore,
+      oppScore2: oppScore2,
       points: points,
       delta: delta,
     ));

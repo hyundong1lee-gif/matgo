@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../game/session.dart';
 import '../game/wallet.dart';
 import '../net/messages.dart';
+import '../net/nearby_transport.dart';
 import '../net/mqtt_relay.dart';
 import '../net/permissions.dart';
 import '../net/relay_transport.dart';
@@ -108,13 +109,33 @@ class _LobbyPageState extends State<LobbyPage> {
     _useNearby();
   }
 
-  Future<void> _startNet(bool host, [String code = '']) async {
+  /// 방 만들 때 몇 명이 할지 고른다 (취소하면 null)
+  Future<int?> _pickPlayers() {
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('몇 명이서 할까?'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop(2),
+            child: const Text('2명 (1:1)', style: TextStyle(fontSize: 16)),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop(3),
+            child: const Text('3명', style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startNet(bool host, [String code = '', int players = 2]) async {
     final nt = RelayTransport(() => MqttRelay());
     _t = nt;
     _listen();
     setState(() => issue = PermIssue.none);
     if (host) {
-      await nt.host();
+      await nt.host(players: players);
     } else {
       await nt.join(Room(code, code));
     }
@@ -122,7 +143,7 @@ class _LobbyPageState extends State<LobbyPage> {
 
   Future<void> _netDialog() async {
     final ctl = TextEditingController();
-    final r = await showDialog<(bool, String)>(
+    final r = await showDialog<(bool, String, int)>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('인터넷 대전'),
@@ -132,8 +153,13 @@ class _LobbyPageState extends State<LobbyPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton(
-                onPressed: () => Navigator.of(ctx).pop((true, '')),
-                child: const Text('방 만들기 (코드 받기)'),
+                onPressed: () => Navigator.of(ctx).pop((true, '', 2)),
+                child: const Text('2명 방 만들기 (코드 받기)'),
+              ),
+              const SizedBox(height: 6),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop((true, '', 3)),
+                child: const Text('3명 방 만들기 (코드 받기)'),
               ),
               const Divider(height: 24),
               TextField(
@@ -149,7 +175,7 @@ class _LobbyPageState extends State<LobbyPage> {
               FilledButton.tonal(
                 onPressed: () {
                   final c = ctl.text.trim().toUpperCase();
-                  if (c.length == 2) Navigator.of(ctx).pop((false, c));
+                  if (c.length == 2) Navigator.of(ctx).pop((false, c, 2));
                 },
                 child: const Text('코드로 입장'),
               ),
@@ -159,17 +185,23 @@ class _LobbyPageState extends State<LobbyPage> {
       ),
     );
     if (r == null || !mounted) return;
-    await _startNet(r.$1, r.$2);
+    await _startNet(r.$1, r.$2, r.$3);
   }
 
   Future<void> _start(bool host) async {
     _useNearby();
+    int players = 2;
+    if (host) {
+      final n = await _pickPlayers();
+      if (n == null || !mounted) return;
+      players = n;
+    }
     final r = await checkNearbyPermissions();
     if (!mounted) return;
     setState(() => issue = r);
     if (r != PermIssue.none) return;
     if (host) {
-      await _t.host();
+      await _t.host(players: players);
     } else {
       await _t.startSearch();
     }
@@ -178,9 +210,10 @@ class _LobbyPageState extends State<LobbyPage> {
   String get _stateText {
     if (state == LinkState.idle) return '대기 중';
     if (state == LinkState.advertising) {
+      final cnt = '(${_t.joined + 1}/${_t.players}명)';
       return _t.roomCode != null
-          ? '방이 열렸어. 코드를 친구에게 알려줘'
-          : '방이 열렸어. 친구가 들어오길 기다리는 중...';
+          ? '방이 열렸어. 코드를 친구에게 알려줘 $cnt'
+          : '방이 열렸어. 친구가 들어오길 기다리는 중... $cnt';
     }
     if (state == LinkState.discovering) return '방을 찾는 중...';
     if (state == LinkState.connecting) return '연결 중...';
@@ -216,7 +249,7 @@ class _LobbyPageState extends State<LobbyPage> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      '인터넷 없이 가까운 폰끼리',
+                      '2~3명 · 인터넷 없이 가까운 폰끼리',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white70),
                     ),
@@ -327,7 +360,10 @@ class _LobbyPageState extends State<LobbyPage> {
                         Card(
                           child: ListTile(
                             dense: true,
-                            title: Text(r.name),
+                            title: Text(
+                              '${r.name.replaceFirst(RegExp(r'-\d$'), '')}'
+                              ' · ${NearbyTransport.playersOf(r.name)}명',
+                            ),
                             trailing: const Icon(Icons.login),
                             onTap: () => _t.join(r),
                           ),
@@ -351,7 +387,7 @@ class _LobbyPageState extends State<LobbyPage> {
                           ),
                         ),
                       const Text(
-                        '이 코드를 친구에게 알려줘 (누르면 복사)\n친구는 "인터넷으로 하기"에서 코드로 입장하면 돼',
+                        '이 코드를 친구에게 알려줘 (누르면 복사)\n친구는 "인터넷으로 하기"에서 코드로 입장하면 돼\n${_t.players}명 방 · 지금 ${_t.joined + 1}명',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white70, fontSize: 12),
                       ),
@@ -359,8 +395,8 @@ class _LobbyPageState extends State<LobbyPage> {
                       const Text(
                         '[근처 연결]\n'
                         '1. 한 명이 "방 만들기"를 누른다\n'
-                        '2. 다른 한 명이 "방 찾기"를 누르고 방을 고른다\n'
-                        '3. 두 폰 모두 블루투스와 위치(GPS)가 켜져 있어야 해\n\n'
+                        '2. 나머지 사람이 "방 찾기"를 누르고 방을 고른다\n'
+                        '3. 모든 폰에 블루투스와 위치(GPS)가 켜져 있어야 해\n\n'
                         '[인터넷] 멀리 있는 친구와는 "인터넷으로 하기"를 눌러 방 코드로 만나',
                         style: TextStyle(color: Colors.white70),
                       ),

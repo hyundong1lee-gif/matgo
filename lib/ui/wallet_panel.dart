@@ -149,18 +149,20 @@ class WalletPanel extends StatelessWidget {
 }
 
 /// 게임 중에 상대 지갑을 읽기 전용으로 본다
-Future<void> showOppWallet(BuildContext context, MatgoSession s) {
+Future<void> showOppWallet(BuildContext context, MatgoSession s,
+    {int? seat, String label = '상대'}) {
+  final target = seat ?? (1 - s.mySeat);
   return showDialog<void>(
     context: context,
     builder: (_) => Dialog(
       child: ListenableBuilder(
         listenable: s,
         builder: (context, _) {
-          final d = s.oppWallet;
+          final d = s.wallets[target];
           if (d == null) {
-            return const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('상대 지갑 정보를 받는 중이야...'),
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('$label 지갑 정보를 받는 중이야...'),
             );
           }
           return Padding(
@@ -170,8 +172,8 @@ Future<void> showOppWallet(BuildContext context, MatgoSession s) {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    '상대 지갑',
+                  Text(
+                    '$label 지갑',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
@@ -219,13 +221,13 @@ Future<void> showOppWallet(BuildContext context, MatgoSession s) {
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
                             builder: (_) => StatsPage(
-                              title: '상대 전적',
+                              title: '$label 전적',
                               source: s,
-                              read: () => s.oppWallet,
+                              read: () => s.wallets[target],
                             ),
                           ),
                         ),
-                        child: const Text('상대 전적 보기'),
+                        child: Text('$label 전적 보기'),
                       ),
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),

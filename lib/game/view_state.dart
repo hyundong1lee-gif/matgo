@@ -7,15 +7,15 @@ List<int> _ints(dynamic v) => (v as List).map((e) => e as int).toList();
 /// 한 플레이어 시점의 게임 상태. 상대 패와 남은 더미의 내용은 들어 있지 않다.
 class ViewState {
   final int gameId; // 판마다 다른 번호 (돈 정산을 한 번만 하려고)
-  final int me; // 0 방장 1 참가자
+  final int me; // 내 자리 번호 (0 방장 1 2 참가자)
   final int seq;
   final int turn;
   final Phase phase;
   final List<int> hand; // 내 패
-  final int oppHandCount; // 상대 패는 장수만
+  final List<int> handCounts; // 모든 자리의 패 장수 (내 것 포함, 상대 패는 장수만)
   final List<int> floor;
   final int stockCount; // 더미는 장수만
-  final List<List<int>> captured; // 먹은 패는 공개 정보 (인덱스는 0 방장 1 참가자)
+  final List<List<int>> captured; // 먹은 패는 공개 정보 (인덱스는 자리 번호)
   final List<int> goCount;
   final List<int> scores;
   final List<int> options;
@@ -28,6 +28,15 @@ class ViewState {
 
   int? get lastHand => lastHands.isEmpty ? null : lastHands.first;
 
+  /// 플레이어 수 (2 또는 3)
+  int get n => captured.length;
+
+  /// 내 다음 순서 자리부터 차례로 나열한 다른 플레이어들
+  List<int> get others => [for (var k = 1; k < n; k++) (me + k) % n];
+
+  /// 2인 대전에서 상대 패 장수 (예전 코드 호환)
+  int get oppHandCount => handCounts[(me + 1) % n];
+
   const ViewState({
     required this.gameId,
     required this.me,
@@ -35,7 +44,7 @@ class ViewState {
     required this.turn,
     required this.phase,
     required this.hand,
-    required this.oppHandCount,
+    required this.handCounts,
     required this.floor,
     required this.stockCount,
     required this.captured,
@@ -58,12 +67,12 @@ class ViewState {
       turn: g.turn,
       phase: g.phase,
       hand: List<int>.of(g.hands[me])..sort(),
-      oppHandCount: g.hands[1 - me].length,
+      handCounts: [for (final h in g.hands) h.length],
       floor: List<int>.of(g.floor),
       stockCount: g.stock.length,
-      captured: [List<int>.of(g.captured[0]), List<int>.of(g.captured[1])],
+      captured: [for (final c in g.captured) List<int>.of(c)],
       goCount: List<int>.of(g.goCount),
-      scores: [scoreOf(g.captured[0]).total, scoreOf(g.captured[1]).total],
+      scores: [for (final c in g.captured) scoreOf(c).total],
       options: List<int>.of(g.ctx.options),
       lastHands: List<int>.of(g.lastHands),
       shakes: List<int>.of(g.shakeCount),
@@ -82,7 +91,7 @@ class ViewState {
         'turn': turn,
         'phase': phase.index,
         'hand': hand,
-        'oppHandCount': oppHandCount,
+        'handCounts': handCounts,
         'floor': floor,
         'stockCount': stockCount,
         'captured': captured,
@@ -105,7 +114,7 @@ class ViewState {
       turn: j['turn'] as int,
       phase: Phase.values[j['phase'] as int],
       hand: _ints(j['hand']),
-      oppHandCount: j['oppHandCount'] as int,
+      handCounts: _ints(j['handCounts']),
       floor: _ints(j['floor']),
       stockCount: j['stockCount'] as int,
       captured: (j['captured'] as List).map(_ints).toList(),

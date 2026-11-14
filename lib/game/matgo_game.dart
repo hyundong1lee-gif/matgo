@@ -38,17 +38,32 @@ class TurnCtx {
 
 class GameResult {
   final int winner; // -1 = 나가리
-  final int points;
+  final int points; // 이긴 사람이 받는 점수 합계 (진 사람들이 낸 점수의 합)
   final List<String> lines;
   final List<List<String>> details; // 플레이어별 족보 내역
 
-  const GameResult(this.winner, this.points, this.lines, this.details);
+  /// 플레이어별 점수 이동: 이긴 사람은 +, 진 사람은 -, 합은 0
+  final List<int> payments;
+
+  /// 진 사람별 박 내역 (광박 피박 고박 독박)
+  final List<List<String>> bakLines;
+
+  const GameResult(
+    this.winner,
+    this.points,
+    this.lines,
+    this.details, {
+    this.payments = const [],
+    this.bakLines = const [],
+  });
 
   Map<String, dynamic> toJson() => {
         'winner': winner,
         'points': points,
         'lines': lines,
         'details': details,
+        'payments': payments,
+        'bakLines': bakLines,
       };
 
   factory GameResult.fromJson(Map<String, dynamic> j) => GameResult(
@@ -58,20 +73,34 @@ class GameResult {
         (j['details'] as List)
             .map((d) => (d as List).map((e) => e as String).toList())
             .toList(),
+        payments: ((j['payments'] as List?) ?? const [])
+            .map((e) => e as int)
+            .toList(),
+        bakLines: ((j['bakLines'] as List?) ?? const [])
+            .map((d) => (d as List).map((e) => e as String).toList())
+            .toList(),
       );
 }
 
-/// 2인 맞고 규칙 엔진. UI와 통신을 모르는 순수 Dart 클래스다.
+/// 2인 또는 3인 맞고 규칙 엔진. UI와 통신을 모르는 순수 Dart 클래스다.
 /// 방장 폰에서만 만들어서 쓴다.
 class MatgoGame {
-  MatgoGame({int first = 0, Random? rng})
-      : _rng = rng ?? Random(),
-        firstPlayer = first {
+  MatgoGame({int players = 2, int first = 0, Random? rng})
+      : n = players,
+        _rng = rng ?? Random(),
+        firstPlayer = first,
+        hands = List.generate(players, (_) => <int>[]),
+        captured = List.generate(players, (_) => <int>[]),
+        goCount = List<int>.filled(players, 0),
+        lastGoScore =
+            List<int>.filled(players, MatgoConfig.minScoreToStop - 1),
+        shakeCount = List<int>.filled(players, 0),
+        _dummySeq = List<int>.filled(players, 0) {
     turn = first;
     _deal();
   }
 
-  /// 테스트용. stock의 마지막 원소가 더미의 맨 위다.
+  /// 테스트용 2인. stock의 마지막 원소가 더미의 맨 위다.
   MatgoGame.custom({
     required List<int> hand0,
     required List<int> hand1,
@@ -81,30 +110,52 @@ class MatgoGame {
     List<int> captured1 = const [],
     int first = 0,
     Random? rng,
-  })  : _rng = rng ?? Random(),
-        firstPlayer = first {
+  }) : this.customN(
+          hands: [hand0, hand1],
+          floor: floor,
+          stock: stock,
+          captured: [captured0, captured1],
+          first: first,
+          rng: rng,
+        );
+
+  /// 테스트용 N인
+  MatgoGame.customN({
+    required List<List<int>> hands,
+    required List<int> floor,
+    required List<int> stock,
+    List<List<int>>? captured,
+    int first = 0,
+    Random? rng,
+  })  : n = hands.length,
+        _rng = rng ?? Random(),
+        firstPlayer = first,
+        hands = List.generate(hands.length, (i) => List<int>.of(hands[i])),
+        captured = List.generate(
+          hands.length,
+          (i) => captured == null ? <int>[] : List<int>.of(captured[i]),
+        ),
+        goCount = List<int>.filled(hands.length, 0),
+        lastGoScore =
+            List<int>.filled(hands.length, MatgoConfig.minScoreToStop - 1),
+        shakeCount = List<int>.filled(hands.length, 0),
+        _dummySeq = List<int>.filled(hands.length, 0) {
     turn = first;
-    hands[0].addAll(hand0);
-    hands[1].addAll(hand1);
     this.floor = List<int>.of(floor);
     this.stock = List<int>.of(stock);
-    captured[0].addAll(captured0);
-    captured[1].addAll(captured1);
   }
 
+  final int n; // 플레이어 수
   final Random _rng;
   final int firstPlayer;
-  final List<List<int>> hands = [[], []];
-  final List<List<int>> captured = [[], []];
+  final List<List<int>> hands;
+  final List<List<int>> captured;
   List<int> floor = [];
   List<int> stock = [];
   int turn = 0;
   Phase phase = Phase.playCard;
-  final List<int> goCount = [0, 0];
-  final List<int> lastGoScore = [
-    MatgoConfig.minScoreToStop - 1,
-    MatgoConfig.minScoreToStop - 1,
-  ];
+  final List<int> goCount;
+  final List<int> lastGoScore;
   TurnCtx ctx = TurnCtx();
   List<GameEvent> events = [];
   List<int> lastHands = []; // 이번 턴에 낸 손패 (폭탄이면 3장)
@@ -113,28 +164,26 @@ class MatgoGame {
   GameResult? result;
 
   /// 폭탄 또는 흔들기를 선언한 횟수. 이긴 사람의 점수에 2배씩 곱한다.
-  final List<int> shakeCount = [0, 0];
-  final List<int> _dummySeq = [0, 0];
+  final List<int> shakeCount;
+  final List<int> _dummySeq;
 
   // ------------------------------------------------------------ 분배
 
   void _deal() {
-    final hs = MatgoConfig.handSize;
-    final fs = MatgoConfig.floorSize;
+    final hs = MatgoConfig.handSizeFor(n);
+    final fs = MatgoConfig.floorSizeFor(n);
     while (true) {
       final deck = List<int>.generate(48, (i) => i)..shuffle(_rng);
-      final h0 = deck.sublist(0, hs);
-      final h1 = deck.sublist(hs, hs * 2);
-      final fl = deck.sublist(hs * 2, hs * 2 + fs);
-      final st = deck.sublist(hs * 2 + fs);
+      final hh = [for (var i = 0; i < n; i++) deck.sublist(i * hs, (i + 1) * hs)];
+      final fl = deck.sublist(n * hs, n * hs + fs);
+      final st = deck.sublist(n * hs + fs);
       // 같은 월 4장이 한 곳에 몰리면(총통 포함) 다시 섞는다
-      if (_hasFour(h0) || _hasFour(h1) || _hasFour(fl)) continue;
-      hands[0]
-        ..clear()
-        ..addAll(h0);
-      hands[1]
-        ..clear()
-        ..addAll(h1);
+      if (hh.any(_hasFour) || _hasFour(fl)) continue;
+      for (var i = 0; i < n; i++) {
+        hands[i]
+          ..clear()
+          ..addAll(hh[i]);
+      }
       floor = fl;
       stock = st;
       return;
@@ -289,7 +338,7 @@ class MatgoGame {
       goCount[p]++;
       lastGoScore[p] = scoreOf(captured[p]).total;
       _ev(p, 'go');
-      turn = 1 - p;
+      turn = (p + 1) % n;
       phase = Phase.playCard;
     } else {
       _endStop(p);
@@ -393,7 +442,7 @@ class MatgoGame {
     ctx = TurnCtx();
 
     final score = scoreOf(captured[p]).total;
-    final bothEmpty = hands[0].isEmpty && hands[1].isEmpty;
+    final bothEmpty = hands.every((h) => h.isEmpty);
     if (score >= MatgoConfig.minScoreToStop && score > lastGoScore[p]) {
       if (bothEmpty) {
         _endStop(p);
@@ -407,7 +456,7 @@ class MatgoGame {
       _endExhausted();
       return;
     }
-    turn = 1 - p;
+    turn = (p + 1) % n;
     phase = Phase.playCard;
   }
 
@@ -415,19 +464,21 @@ class MatgoGame {
     captured[p].addAll(ids);
   }
 
-  /// 상대가 먹은 피 중 값이 낮은 것부터 가져온다.
+  /// 다른 모든 플레이어에게서 값이 낮은 피부터 가져온다.
   void _steal(int p) {
-    final opp = 1 - p;
-    for (var n = 0; n < MatgoConfig.stealPiCount; n++) {
-      final pis = captured[opp]
-          .where((id) => allCards[id].kind == Kind.pi)
-          .toList();
-      if (pis.isEmpty) return;
-      pis.sort((a, b) => allCards[a].piValue.compareTo(allCards[b].piValue));
-      final take = pis.first;
-      captured[opp].remove(take);
-      captured[p].add(take);
-      _ev(p, 'steal');
+    for (var o = 0; o < n; o++) {
+      if (o == p) continue;
+      for (var k = 0; k < MatgoConfig.stealPiCount; k++) {
+        final pis = captured[o]
+            .where((id) => allCards[id].kind == Kind.pi)
+            .toList();
+        if (pis.isEmpty) break;
+        pis.sort((a, b) => allCards[a].piValue.compareTo(allCards[b].piValue));
+        final take = pis.first;
+        captured[o].remove(take);
+        captured[p].add(take);
+        _ev(p, 'steal');
+      }
     }
   }
 
@@ -438,47 +489,82 @@ class MatgoGame {
   // ------------------------------------------------------------ 종료와 정산
 
   GameResult _calc(int w) {
-    final l = 1 - w;
     final ws = scoreOf(captured[w]);
-    final ls = scoreOf(captured[l]);
     final lines = <String>[];
-    var pts = ws.total;
+    var base = ws.total;
     lines.add('기본 ${ws.total}점');
 
     final g = goCount[w];
     if (g > 0) {
       final add = g >= 2 ? MatgoConfig.goAddSecond : MatgoConfig.goAddFirst;
-      pts += add;
+      base += add;
       lines.add('$g고 +$add');
     }
     if (g >= MatgoConfig.goMultiplierFrom) {
       final mult = 1 << (g - MatgoConfig.goMultiplierFrom + 1);
-      pts *= mult;
+      base *= mult;
       lines.add('고 배수 ×$mult');
     }
-    if (ws.gwangScore > 0 && ls.gwangCount == 0) {
-      pts *= MatgoConfig.gwangBakMultiplier;
-      lines.add('광박 ×${MatgoConfig.gwangBakMultiplier}');
-    }
-    if (ws.piScore > 0 && ls.piValue <= MatgoConfig.piBakMaxPi) {
-      pts *= MatgoConfig.piBakMultiplier;
-      lines.add('피박 ×${MatgoConfig.piBakMultiplier}');
-    }
-    if (goCount[l] > 0) {
-      // 고박: 고를 불렀다가 상대에게 먼저 난 경우
-      pts *= MatgoConfig.goBakMultiplier;
-      lines.add('고박 ×${MatgoConfig.goBakMultiplier}');
-    }
+
     final sh = shakeCount[w];
-    if (sh > 0) {
-      final mult = 1 << sh;
-      pts *= mult;
-      lines.add('폭탄/흔들기 ×$mult');
+    final shMult = sh > 0 ? 1 << sh : 1;
+
+    // 진 사람마다 박을 따로 계산한다
+    final losers = [for (var i = 0; i < n; i++) if (i != w) i];
+    final share = List<int>.filled(n, 0);
+    final bak = List.generate(n, (_) => <String>[]);
+    for (final l in losers) {
+      final ls = scoreOf(captured[l]);
+      var pts = base;
+      if (ws.gwangScore > 0 && ls.gwangCount == 0) {
+        pts *= MatgoConfig.gwangBakMultiplier;
+        bak[l].add('광박 ×${MatgoConfig.gwangBakMultiplier}');
+      }
+      if (ws.piScore > 0 && ls.piValue <= MatgoConfig.piBakMaxPi) {
+        pts *= MatgoConfig.piBakMultiplier;
+        bak[l].add('피박 ×${MatgoConfig.piBakMultiplier}');
+      }
+      if (n == 2 && goCount[l] > 0) {
+        // 2인 고박: 고를 불렀다가 상대에게 먼저 난 경우
+        pts *= MatgoConfig.goBakMultiplier;
+        bak[l].add('고박 ×${MatgoConfig.goBakMultiplier}');
+      }
+      pts *= shMult;
+      share[l] = pts;
     }
-    return GameResult(w, pts, lines, [
-      scoreOf(captured[0]).lines,
-      scoreOf(captured[1]).lines,
-    ]);
+
+    final pay = List<int>.filled(n, 0);
+    final callers = losers.where((l) => goCount[l] > 0).toList();
+    if (n >= 3 && callers.length == 1) {
+      // 3인 고박(독박): 고를 부른 사람이 다른 진 사람 몫까지 혼자 낸다
+      final c = callers.first;
+      final others = losers.where((l) => l != c).toList();
+      final extra = others.fold(0, (a, o) => a + share[o]);
+      pay[c] = -(share[c] + extra);
+      bak[c].add('독박 (다른 사람 몫 $extra점 포함)');
+    } else {
+      for (final l in losers) {
+        pay[l] = -share[l];
+      }
+    }
+    final total = -pay.fold(0, (a, b) => a + b);
+    pay[w] = total;
+
+    // 2인은 예전 표시를 그대로 쓴다 (박 줄이 점수 줄에 섞여 들어간다)
+    if (n == 2) {
+      lines.addAll(bak[losers.first]);
+    }
+    if (shMult > 1) {
+      lines.add('폭탄/흔들기 ×$shMult');
+    }
+    return GameResult(
+      w,
+      total,
+      lines,
+      [for (var i = 0; i < n; i++) scoreOf(captured[i]).lines],
+      payments: pay,
+      bakLines: bak,
+    );
   }
 
   void _endStop(int w) {
@@ -489,7 +575,7 @@ class MatgoGame {
 
   /// 패가 모두 떨어진 경우: 고를 부른 사람이 있으면 그 사람이 이기고 없으면 나가리
   void _endExhausted() {
-    final cand = [0, 1].where((i) => goCount[i] > 0).toList();
+    final cand = [for (var i = 0; i < n; i++) if (goCount[i] > 0) i];
     GameResult? best;
     var tie = false;
     for (final i in cand) {
@@ -502,10 +588,14 @@ class MatgoGame {
       }
     }
     if (best == null || tie) {
-      result = GameResult(-1, 0, ['나가리'], [
-        scoreOf(captured[0]).lines,
-        scoreOf(captured[1]).lines,
-      ]);
+      result = GameResult(
+        -1,
+        0,
+        ['나가리'],
+        [for (var i = 0; i < n; i++) scoreOf(captured[i]).lines],
+        payments: List<int>.filled(n, 0),
+        bakLines: List.generate(n, (_) => <String>[]),
+      );
       _ev(-1, 'nagari');
     } else {
       result = best;

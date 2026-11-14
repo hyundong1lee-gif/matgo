@@ -13,8 +13,15 @@ import 'card_sprite.dart';
 import 'table_layout.dart';
 import 'wallet_panel.dart';
 
-String eventText(GameEvent e, int me) {
-  final who = e.p == me ? '나' : '상대';
+/// 자리 이름: 2명이면 '상대', 3명이면 내 다음 순서가 '상대1' 그 다음이 '상대2'
+String seatName(int owner, int me, int n) {
+  if (owner == me) return '나';
+  if (n == 2) return '상대';
+  return '상대${(owner - me + n) % n}';
+}
+
+String eventText(GameEvent e, int me, [int n = 2]) {
+  final who = seatName(e.p, me, n);
   switch (e.code) {
     case 'ppeok':
       return '$who: 뻑!';
@@ -159,8 +166,7 @@ class _GamePageState extends State<GamePage> {
   Set<int> _cardIds(ViewState v) => {
         ...v.hand,
         ...v.floor,
-        ...v.captured[0],
-        ...v.captured[1],
+        for (final c in v.captured) ...c,
         ...v.lastHands,
         if (v.lastStock != null) v.lastStock!,
       };
@@ -239,12 +245,16 @@ class _GamePageState extends State<GamePage> {
         _spawnFaceDown.add(id);
       } else if (v.lastHands.contains(id) && v.lastBy != v.me) {
         final k = v.lastHands.indexOf(id);
-        final base = TableLayout.oppBackPos(
-          v.oppHandCount,
-          v.oppHandCount + 1,
-        );
+        final owner = v.lastBy!;
+        final cnt = v.handCounts[owner];
+        final Offset base;
+        if (v.n == 2) {
+          base = TableLayout.oppBackPos(cnt, cnt + 1);
+        } else {
+          base = TableLayout.oppBackPos3(v.others.indexOf(owner), cnt, cnt + 1);
+        }
         _spawn[id] = Offset(base.dx + k * 14, base.dy);
-        _spawnW[id] = TableLayout.oppW;
+        _spawnW[id] = v.n == 2 ? TableLayout.oppW : TableLayout.oppW3;
       }
     }
     _scheduleFx(v, flipStep, handStep);
@@ -265,7 +275,7 @@ class _GamePageState extends State<GamePage> {
       _later(land, () => HapticFeedback.lightImpact());
     }
 
-    final texts = v.events.map((e) => eventText(e, v.me)).toList();
+    final texts = v.events.map((e) => eventText(e, v.me, v.n)).toList();
     if (texts.isNotEmpty) {
       final text = texts.join('   ');
       final token = ++_bannerSeq;
@@ -326,7 +336,7 @@ class _GamePageState extends State<GamePage> {
                   child: Padding(
                     padding: EdgeInsets.all(24),
                     child: Text(
-                      '두 폰의 앱 버전이 달라.\n두 폰 모두 옛날 앱을 지우고\n최신 APK를 다시 설치해줘.\n(로비 맨 아래 버전이 같아야 해)',
+                      '폰끼리 앱 버전이 달라.\n모든 폰에 최신 APK를 다시 설치해줘.\n(로비 위쪽 버전 글자가 같아야 해)',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
                     ),
@@ -387,7 +397,7 @@ class _GamePageState extends State<GamePage> {
         height: TableLayout.height,
         child: Stack(
           children: [
-            ..._boardBackgrounds(),
+            ..._boardBackgrounds(v),
             for (final sp in specs)
               CardSprite(key: ValueKey(sp.key), spec: sp),
             ..._overlays(v),
@@ -421,23 +431,28 @@ class _GamePageState extends State<GamePage> {
     ));
 
     // 상대 손패 (뒷면)
-    for (var i = 0; i < v.oppHandCount; i++) {
-      specs.add(SpriteSpec(
-        key: 'ob$i',
-        id: null,
-        pos: TableLayout.oppBackPos(i, v.oppHandCount),
-        w: TableLayout.oppW,
-        z: 100 + i,
-      ));
+    for (var gi = 0; gi < v.others.length; gi++) {
+      final owner = v.others[gi];
+      final cnt = v.handCounts[owner];
+      for (var i = 0; i < cnt; i++) {
+        specs.add(SpriteSpec(
+          key: 'ob${owner}_$i',
+          id: null,
+          pos: v.n == 2
+              ? TableLayout.oppBackPos(i, cnt)
+              : TableLayout.oppBackPos3(gi, i, cnt),
+          w: v.n == 2 ? TableLayout.oppW : TableLayout.oppW3,
+          z: 100 + i,
+        ));
+      }
     }
 
-    // 먹은 패: 왼쪽이 상대 오른쪽이 나
+    // 먹은 패: 왼쪽이 상대(들) 오른쪽이 나
     var k = 0;
-    for (var side = 0; side < 2; side++) {
-      final owner = side == 0 ? 1 - v.me : v.me;
-      final origin = side == 0 ? TableLayout.oppBoard : TableLayout.myBoard;
-      final st = side == 0 ? TableLayout.oppCap : TableLayout.myCap;
-      final pos = TableLayout.captured(v.captured[owner], origin, style: st);
+    for (final b in _boards(v)) {
+      final owner = b.owner;
+      final st = b.style;
+      final pos = TableLayout.captured(v.captured[owner], b.origin, style: st);
       pos.forEach((id, p) {
         specs.add(SpriteSpec(
           key: 'c$id',
@@ -531,6 +546,20 @@ class _GamePageState extends State<GamePage> {
     return specs;
   }
 
+  /// 먹은 패 보드 목록: 상대들 다음에 내 것
+  List<({int owner, Offset origin, CapStyle style})> _boards(ViewState v) {
+    final out = <({int owner, Offset origin, CapStyle style})>[];
+    for (var gi = 0; gi < v.others.length; gi++) {
+      out.add((
+        owner: v.others[gi],
+        origin: v.n == 2 ? TableLayout.oppBoard : TableLayout.oppBoards3[gi],
+        style: v.n == 2 ? TableLayout.oppCap : TableLayout.oppCap3,
+      ));
+    }
+    out.add((owner: v.me, origin: TableLayout.myBoard, style: TableLayout.myCap));
+    return out;
+  }
+
   Color _slotColor(String kind) {
     switch (kind) {
       case 'gwang':
@@ -550,12 +579,10 @@ class _GamePageState extends State<GamePage> {
     }
   }
 
-  List<Widget> _boardBackgrounds() {
+  List<Widget> _boardBackgrounds(ViewState v) {
     final out = <Widget>[];
-    for (final side in [0, 1]) {
-      final o = side == 0 ? TableLayout.oppBoard : TableLayout.myBoard;
-      final st = side == 0 ? TableLayout.oppCap : TableLayout.myCap;
-      for (final sl in TableLayout.slots(o, style: st)) {
+    for (final b in _boards(v)) {
+      for (final sl in TableLayout.slots(b.origin, style: b.style)) {
         out.add(Positioned(
           left: sl.left,
           top: sl.top,
@@ -588,20 +615,74 @@ class _GamePageState extends State<GamePage> {
     return t;
   }
 
-  Widget _label(double left, String text, bool bold) {
+  Widget _label(double left, String text, bool bold,
+      {double top = 6, double width = 198, double size = 14}) {
     return Positioned(
       left: left,
-      top: 6,
-      width: 198,
+      top: top,
+      width: width,
       child: Text(
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: bold ? Colors.white : Colors.white70,
-          fontSize: 14,
+          fontSize: size,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
         ),
+      ),
+    );
+  }
+
+  Widget _oppWalletBadge(ViewState v, int owner,
+      {required double left, required double width}) {
+    final name = seatName(owner, v.me, v.n);
+    return Positioned(
+      left: left,
+      top: 2,
+      width: width,
+      child: ListenableBuilder(
+        listenable: s,
+        builder: (context, _) {
+          final d = s.wallets[owner];
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showOppWallet(context, s, seat: owner, label: name),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      d == null ? '...' : won(d.money),
+                      style: TextStyle(
+                        color: (d != null && d.money < 0)
+                            ? Colors.redAccent
+                            : Colors.lightBlueAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    v.n == 2 ? '상대 지갑 보기' : '$name 지갑',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -625,13 +706,16 @@ class _GamePageState extends State<GamePage> {
     final canBomb = canPlay && inHandSame == 3 && floorSame == 1;
     final canShake = canPlay && inHandSame >= 3 && floorSame == 0;
 
+    final turnName = seatName(v.turn, v.me, v.n);
     String prompt;
     if (v.phase == Phase.ended) {
       prompt = '판이 끝났어';
     } else if (!myTurn) {
       prompt = v.phase == Phase.goStop
-          ? '상대가 고/스톱을 고르는 중'
-          : (v.phase == Phase.flipStock ? '상대가 더미를 뒤집는 중' : '상대 차례');
+          ? '$turnName이(가) 고/스톱을 고르는 중'
+          : (v.phase == Phase.flipStock
+              ? '$turnName이(가) 더미를 뒤집는 중'
+              : '$turnName 차례');
     } else if (v.phase == Phase.playCard) {
       if (canBomb) {
         prompt = '폭탄 가능! 바닥에 같은 월이 1장 있어';
@@ -690,63 +774,34 @@ class _GamePageState extends State<GamePage> {
     }
 
     return [
-      _label(TableLayout.oppBoard.dx, _head(v, 1 - v.me, '상대'),
-          v.turn != v.me),
+      for (var gi = 0; gi < v.others.length; gi++)
+        if (v.n == 2)
+          _label(TableLayout.oppBoard.dx,
+              _head(v, v.others[gi], seatName(v.others[gi], v.me, v.n)),
+              v.turn != v.me)
+        else
+          _label(
+            TableLayout.oppBoards3[gi].dx,
+            _head(v, v.others[gi], seatName(v.others[gi], v.me, v.n)),
+            v.turn == v.others[gi],
+            top: TableLayout.oppBoards3[gi].dy - 19,
+            width: TableLayout.oppCap3.width,
+            size: 12,
+          ),
       _label(TableLayout.myBoard.dx, _head(v, v.me, '나'), v.turn == v.me),
       // 상대 돈 (누르면 상대 지갑)
-      Positioned(
-        left: 214,
-        top: 2,
-        width: 104,
-        child: ListenableBuilder(
-          listenable: s,
-          builder: (context, _) {
-            final d = s.oppWallet;
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => showOppWallet(context, s),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        d == null ? '...' : won(d.money),
-                        style: TextStyle(
-                          color: (d != null && d.money < 0)
-                              ? Colors.redAccent
-                              : Colors.lightBlueAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    const Text(
-                      '상대 지갑 보기',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.white70, fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+      for (var gi = 0; gi < v.others.length; gi++)
+        _oppWalletBadge(
+          v,
+          v.others[gi],
+          left: v.n == 2 ? 214 : TableLayout.walletX3(gi),
+          width: v.n == 2 ? 104 : 90,
         ),
-      ),
       // 내 돈 (누르면 지갑)
       Positioned(
-        left: 6,
-        top: 346,
-        width: 148,
+        left: v.n == 2 ? 6 : 172,
+        top: v.n == 2 ? 346 : 352,
+        width: v.n == 2 ? 148 : 74,
         child: ListenableBuilder(
           listenable: Wallet.i,
           builder: (context, _) => GestureDetector(
@@ -878,6 +933,15 @@ class _GamePageState extends State<GamePage> {
   Widget _resultOverlay(ViewState v) {
     final r = v.result!;
     final title = r.winner < 0 ? '나가리' : (r.winner == v.me ? '승리!' : '패배');
+    final multi = v.n > 2;
+    String sp(int pts) => '${pts > 0 ? '+' : ''}$pts점';
+    final chipLines = multi
+        ? [
+            for (var i = 0; i < r.bakLines.length; i++)
+              for (final l in r.bakLines[i])
+                '${seatName(i, v.me, v.n)} $l',
+          ]
+        : r.lines.where((l) => l.contains('박')).toList();
     return Container(
       color: Colors.black87,
       alignment: Alignment.center,
@@ -895,8 +959,31 @@ class _GamePageState extends State<GamePage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                if (r.winner >= 0)
+                if (r.winner >= 0 && !multi)
                   Text('${r.points}점', style: const TextStyle(fontSize: 22)),
+                if (r.winner >= 0 && multi) ...[
+                  Text(
+                    '${seatName(r.winner, v.me, v.n)} 우승',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    children: [
+                      for (var i = 0; i < r.payments.length; i++)
+                        Text(
+                          '${seatName(i, v.me, v.n)} ${sp(r.payments[i])}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: r.payments[i] < 0
+                                ? Colors.red
+                                : Colors.green.shade700,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 ListenableBuilder(
                   listenable: Wallet.i,
                   builder: (context, _) {
@@ -920,12 +1007,12 @@ class _GamePageState extends State<GamePage> {
                   child: const Text('지갑 (대출)'),
                 ),
                 const SizedBox(height: 6),
-                if (r.lines.any((l) => l.contains('박')))
+                if (chipLines.isNotEmpty)
                   Wrap(
                     alignment: WrapAlignment.center,
                     spacing: 6,
                     children: [
-                      for (final l in r.lines.where((l) => l.contains('박')))
+                      for (final l in chipLines)
                         Chip(
                           label: Text(
                             l,
@@ -942,8 +1029,12 @@ class _GamePageState extends State<GamePage> {
                 for (final l in r.lines.where((l) => !l.contains('박')))
                   Text(l),
                 const Divider(),
-                Text('내 족보: ${_joinOrNone(r.details[v.me])}'),
-                Text('상대 족보: ${_joinOrNone(r.details[1 - v.me])}'),
+                for (var i = 0; i < v.n; i++)
+                  Text(
+                    i == v.me
+                        ? '내 족보: ${_joinOrNone(r.details[i])}'
+                        : '${v.n == 2 ? '상대' : seatName(i, v.me, v.n)} 족보: ${_joinOrNone(r.details[i])}',
+                  ),
                 const SizedBox(height: 10),
                 FilledButton(
                   onPressed: s.newGame,
@@ -987,7 +1078,7 @@ class _GamePageState extends State<GamePage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            '두 폰을 가까이 두고 블루투스와 위치를 켜둬',
+            '폰들을 가까이 두고 블루투스와 위치를 켜둬',
             style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ],

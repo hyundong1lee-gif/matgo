@@ -4,6 +4,10 @@ class MatgoConfig {
   static const int handSize = 10;
   static const int floorSize = 8;
 
+  /// 인원수별 분배: 2인 손 10 바닥 8 더미 20 / 3인 손 7 바닥 6 더미 21
+  static int handSizeFor(int players) => players == 2 ? handSize : 7;
+  static int floorSizeFor(int players) => players == 2 ? floorSize : 6;
+
   // 스톱 가능한 최소 점수
   static const int minScoreToStop = 3;
 

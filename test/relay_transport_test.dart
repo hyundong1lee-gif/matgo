@@ -24,6 +24,7 @@ class FakeRelay implements Relay {
   final _on = StreamController<bool>.broadcast();
   final Set<String> subs = {};
   bool closed = false;
+  bool muted = false; // true면 이 기기만 보내지도 받지도 못함
 
   @override
   Stream<RelayMsg> get incoming => _in.stream;
@@ -35,15 +36,15 @@ class FakeRelay implements Relay {
   void subscribe(String topic) => subs.add(topic);
   @override
   void publish(String topic, String payload) {
-    if (b.blocked) return;
+    if (b.blocked || muted) return;
     for (final r in List.of(b.relays)) {
-      if (!r.closed && r.subs.contains(topic)) {
+      if (!r.closed && !r.muted && r.subs.contains(topic)) {
         Future.microtask(() {
-          if (!r.closed) r._in.add(RelayMsg(topic, payload));
+          if (!r.closed && !r.muted) r._in.add(RelayMsg(topic, payload));
         });
         if (b.dup) {
           Future.microtask(() {
-            if (!r.closed) r._in.add(RelayMsg(topic, payload));
+            if (!r.closed && !r.muted) r._in.add(RelayMsg(topic, payload));
           });
         }
       }
@@ -212,6 +213,99 @@ void main() {
     await guest.close();
     await wait(() => host.current == LinkState.failed);
     expect(host.current, LinkState.failed);
+  });
+
+  test('3인방: 두 명이 들어오면 연결되고 자리 번호가 다르다', () async {
+    final b = FakeBroker();
+    final host = mk(b);
+    final a = mk(b);
+    final c = mk(b);
+    final gotHost = <Map<String, dynamic>>[];
+    final gotA = <Map<String, dynamic>>[];
+    final gotC = <Map<String, dynamic>>[];
+    host.messages.listen(gotHost.add);
+    a.messages.listen(gotA.add);
+    c.messages.listen(gotC.add);
+
+    await host.host(players: 3);
+    expect(host.players, 3);
+    await a.join(Room(host.roomCode!, ''));
+    await wait(() => a.current == LinkState.connected);
+    // 한 명만 들어온 상태: 방장은 계속 기다림
+    expect(host.current, LinkState.advertising);
+    expect(host.joined, 1);
+
+    await c.join(Room(host.roomCode!, ''));
+    await wait(() =>
+        host.current == LinkState.connected && c.current == LinkState.connected);
+    expect(host.joined, 2);
+    expect(a.mySeat, 1);
+    expect(c.mySeat, 2);
+    expect(a.players, 3);
+    expect(c.players, 3);
+
+    // 방장이 한 명에게만 / 전체에게
+    await host.sendTo(2, 'view', {'v': 'only2'});
+    await host.send('all', {'v': 'all'});
+    await a.send('play_card', {'cardId': 3});
+    await c.send('play_card', {'cardId': 4});
+    await wait(() => gotHost.length >= 2 && gotC.length >= 2 && gotA.isNotEmpty);
+    expect(gotA.map((m) => m['type']).toList(), ['all']);
+    expect(gotC.map((m) => m['type']).toList(), ['view', 'all']);
+    final byFrom = {for (final m in gotHost) m['_from']: m['cardId']};
+    expect(byFrom, {1: 3, 2: 4});
+
+    await host.close();
+    await a.close();
+    await c.close();
+  });
+
+  test('3인방: 정원이 차면 낯선 기기는 거절', () async {
+    final b = FakeBroker();
+    final host = mk(b);
+    final a = mk(b);
+    final c = mk(b);
+    final d = mk(b);
+    await host.host(players: 3);
+    await a.join(Room(host.roomCode!, ''));
+    await c.join(Room(host.roomCode!, ''));
+    await wait(() => host.current == LinkState.connected);
+    await d.join(Room(host.roomCode!, ''));
+    await wait(() => d.current == LinkState.failed);
+    expect(d.current, LinkState.failed);
+    expect(host.current, LinkState.connected);
+    await host.close();
+    await a.close();
+    await c.close();
+  });
+
+  test('3인방: 한 명만 끊기면 방장은 재연결 대기 후 복구', () async {
+    final b = FakeBroker();
+    final host = mk(b);
+    final a = mk(b);
+    final c = mk(b);
+    final resumed = <Object?>[];
+    host.messages.listen((m) {
+      if (m['type'] == '_resumed') resumed.add(m['_from']);
+    });
+    await host.host(players: 3);
+    await a.join(Room(host.roomCode!, ''));
+    await c.join(Room(host.roomCode!, ''));
+    await wait(() => host.current == LinkState.connected);
+    resumed.clear();
+
+    // a 기기만 인터넷이 끊긴 상황
+    final aRelay = b.relays[1];
+    aRelay.muted = true;
+    await wait(() => host.current == LinkState.reconnecting);
+    expect(host.current, LinkState.reconnecting);
+    aRelay.muted = false;
+    await wait(() => host.current == LinkState.connected, 2000);
+    expect(host.current, LinkState.connected);
+    expect(resumed, contains(1));
+    await host.close();
+    await a.close();
+    await c.close();
   });
 
   test('서버에 못 붙으면 실패', () async {

@@ -89,7 +89,7 @@ class StatsPage extends StatelessWidget {
                               title: Text(
                                 r.result == 0
                                     ? '나가리'
-                                    : '승부 ${r.points}점 (나 ${r.myScore} : 상대 ${r.oppScore})',
+                                    : '승부 ${r.points}점 (나 ${r.myScore} : ${r.oppScore}${r.oppScore2 >= 0 ? ' : ${r.oppScore2}' : ''})',
                               ),
                               subtitle: Text('${total - i}번째 판 · ${_time(r.id)}'),
                               trailing: Text(

@@ -314,6 +314,147 @@ void main() {
     });
   });
 
+  group('3인', () {
+    test('분배: 손패 7장씩 바닥 6장 더미 21장', () {
+      final g = MatgoGame(players: 3);
+      expect(g.hands.length, 3);
+      for (final h in g.hands) {
+        expect(h.length, 7);
+      }
+      expect(g.floor.length, 6);
+      expect(g.stock.length, 21);
+      final all = <int>[...g.hands.expand((h) => h), ...g.floor, ...g.stock];
+      expect(all.toSet().length, 48);
+    });
+
+    test('턴은 0 -> 1 -> 2 -> 0 순서', () {
+      final g = MatgoGame.customN(
+        hands: [
+          [cid(1, 0), cid(1, 1)],
+          [cid(2, 0), cid(2, 1)],
+          [cid(3, 0), cid(3, 1)],
+        ],
+        floor: [cid(6, 0)],
+        stock: [cid(7, 0), cid(8, 0), cid(9, 0), cid(10, 0), cid(11, 0), cid(12, 0)],
+      );
+      turn(g, 0, cid(1, 0));
+      expect(g.turn, 1);
+      turn(g, 1, cid(2, 0));
+      expect(g.turn, 2);
+      turn(g, 2, cid(3, 0));
+      expect(g.turn, 0);
+    });
+
+    test('쪽이면 다른 두 사람 모두에게서 피를 한 장씩 가져온다', () {
+      final g = MatgoGame.customN(
+        hands: [
+          [cid(1, 0), cid(4, 0)],
+          [cid(8, 1), cid(9, 1)],
+          [cid(10, 1), cid(11, 1)],
+        ],
+        floor: [cid(5, 0)],
+        stock: [cid(3, 2), cid(1, 1)],
+        captured: [[], [cid(2, 2)], [cid(2, 3)]],
+      );
+      turn(g, 0, cid(1, 0));
+      expect(g.captured[0].contains(cid(2, 2)), true);
+      expect(g.captured[0].contains(cid(2, 3)), true);
+      expect(g.captured[1].isEmpty, true);
+      expect(g.captured[2].isEmpty, true);
+    });
+
+    MatgoGame stopGame() {
+      final g = MatgoGame.customN(
+        hands: [
+          [cid(6, 3), cid(6, 2)],
+          [cid(8, 1), cid(9, 1)],
+          [cid(10, 1), cid(11, 1)],
+        ],
+        floor: [cid(7, 2)],
+        stock: [cid(12, 2), cid(10, 2)],
+        captured: [
+          [cid(1, 0), cid(3, 0), cid(8, 0)],
+          [],
+          [],
+        ],
+      );
+      turn(g, 0, cid(6, 3));
+      expect(g.phase, Phase.goStop);
+      return g;
+    }
+
+    test('이긴 사람이 진 두 사람에게서 각각 받는다 (광박 각각 적용)', () {
+      final g = stopGame();
+      g.goStop(0, false);
+      final r = g.result!;
+      // 광 3점 x 광박 2 = 6점씩
+      expect(r.payments, [12, -6, -6]);
+      expect(r.points, 12);
+      expect(r.payments.fold<int>(0, (a, b) => a + b), 0);
+    });
+
+    test('고를 부른 한 명이 지면 독박: 다른 진 사람 몫까지 혼자 낸다', () {
+      final g = stopGame();
+      g.goCount[2] = 1;
+      g.goStop(0, false);
+      final r = g.result!;
+      expect(r.payments, [12, 0, -12]);
+      expect(r.bakLines[2].any((l) => l.startsWith('독박')), true);
+    });
+
+    test('두 명 모두 고를 불렀으면 각자 자기 몫만 낸다', () {
+      final g = stopGame();
+      g.goCount[1] = 1;
+      g.goCount[2] = 1;
+      g.goStop(0, false);
+      expect(g.result!.payments, [12, -6, -6]);
+    });
+
+    test('무작위 3인 판도 카드가 48장으로 유지되고 끝난다', () {
+      for (var k = 0; k < 150; k++) {
+        final g = MatgoGame(players: 3);
+        var guard = 0;
+        while (g.phase != Phase.ended && guard < 800) {
+          guard++;
+          final p = g.turn;
+          switch (g.phase) {
+            case Phase.playCard:
+              g.playCard(p, g.hands[p].first, shake: true);
+              break;
+            case Phase.chooseFloorHand:
+            case Phase.chooseFloorStock:
+              g.chooseFloor(p, g.ctx.options.first);
+              break;
+            case Phase.flipStock:
+              g.flipStock(p);
+              break;
+            case Phase.goStop:
+              g.goStop(p, k % 3 == 0);
+              break;
+            case Phase.ended:
+              break;
+          }
+          if (g.phase == Phase.playCard ||
+              g.phase == Phase.goStop ||
+              g.phase == Phase.ended) {
+            final all = <int>[
+              ...g.hands.expand((h) => h).where((c) => !isDummyId(c)),
+              ...g.floor,
+              ...g.stock,
+              ...g.captured.expand((c) => c),
+            ];
+            expect(all.length, 48);
+            expect(all.toSet().length, 48);
+          }
+        }
+        expect(g.phase, Phase.ended);
+        final r = g.result!;
+        expect(r.payments.length, 3);
+        expect(r.payments.fold<int>(0, (a, b) => a + b), 0);
+      }
+    });
+  });
+
   group('전체 진행', () {
     test('무작위 판을 끝까지 돌려도 카드가 48장으로 유지된다', () {
       for (var n = 0; n < 200; n++) {
