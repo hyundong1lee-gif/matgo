@@ -4,6 +4,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   snapshotTests();
+
+  test('이름은 공백을 없애고 8글자까지 저장되며 사본으로 전달된다', () {
+    final w = Wallet.forTest();
+    w.setName('  이현동  ');
+    expect(w.name, '이현동');
+    w.setName('가나다라마바사아자차');
+    expect(w.name, '가나다라마바사아');
+    final back = WalletSnapshot.fromJson(w.snapshot().toJson());
+    expect(back.name, '가나다라마바사아');
+    // 이름이 없는 예전 사본도 읽힌다
+    final old = WalletSnapshot.fromJson({'money': 1, 'debt': 0, 'records': []});
+    expect(old.name, '');
+  });
   test('시작 50억 정산은 판마다 한 번만', () {
     final w = Wallet.forTest();
     expect(w.money, 5000000000);

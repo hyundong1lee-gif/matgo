@@ -109,6 +109,60 @@ class _LobbyPageState extends State<LobbyPage> {
     _useNearby();
   }
 
+  /// 게임에서 쓸 이름을 입력받는다 (취소하면 false)
+  Future<bool> _editName() async {
+    final ctl = TextEditingController(text: Wallet.i.name);
+    String? err;
+    final r = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('내 이름'),
+          content: TextField(
+            controller: ctl,
+            autofocus: true,
+            maxLength: 8,
+            decoration: InputDecoration(
+              hintText: '게임에서 보일 이름 (최대 8글자)',
+              errorText: err,
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (_) {
+              if (err != null) setS(() => err = null);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final t = ctl.text.trim();
+                if (t.isEmpty) {
+                  setS(() => err = '이름을 입력해줘');
+                  return;
+                }
+                Navigator.of(ctx).pop(t);
+              },
+              child: const Text('저장'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (r == null) return false;
+    Wallet.i.setName(r);
+    return true;
+  }
+
+  /// 이름이 없으면 먼저 정하게 한다
+  Future<bool> _ensureName() async {
+    if (Wallet.i.name.isNotEmpty) return true;
+    final ok = await _editName();
+    return ok && mounted;
+  }
+
   /// 방 만들 때 몇 명이 할지 고른다 (취소하면 null)
   Future<int?> _pickPlayers() {
     return showDialog<int>(
@@ -142,6 +196,7 @@ class _LobbyPageState extends State<LobbyPage> {
   }
 
   Future<void> _netDialog() async {
+    if (!await _ensureName()) return;
     final ctl = TextEditingController();
     final r = await showDialog<(bool, String, int)>(
       context: context,
@@ -189,6 +244,7 @@ class _LobbyPageState extends State<LobbyPage> {
   }
 
   Future<void> _start(bool host) async {
+    if (!await _ensureName()) return;
     _useNearby();
     int players = 2;
     if (host) {
@@ -271,6 +327,18 @@ class _LobbyPageState extends State<LobbyPage> {
                             color: Colors.yellowAccent,
                             fontWeight: FontWeight.bold,
                           ),
+                        ),
+                      ),
+                    ),
+                    ListenableBuilder(
+                      listenable: Wallet.i,
+                      builder: (context, _) => TextButton(
+                        onPressed: _editName,
+                        child: Text(
+                          Wallet.i.name.isEmpty
+                              ? '이름 정하기'
+                              : '이름: ${Wallet.i.name} (바꾸기)',
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                     ),

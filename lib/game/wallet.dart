@@ -85,8 +85,10 @@ class WalletSnapshot {
     required this.debt,
     required this.resets,
     required this.records,
+    this.name = '',
   });
 
+  final String name; // 플레이어 이름
   final int money;
   final int debt;
   final int resets; // 빚 리셋을 누른 횟수
@@ -100,6 +102,7 @@ class WalletSnapshot {
       records.fold(0, (a, r) => r.result > 0 && r.points > a ? r.points : a);
 
   Map<String, dynamic> toJson() => {
+        'name': name,
         'money': money,
         'debt': debt,
         'resets': resets,
@@ -107,6 +110,7 @@ class WalletSnapshot {
       };
 
   factory WalletSnapshot.fromJson(Map<String, dynamic> j) => WalletSnapshot(
+        name: (j['name'] as String?) ?? '',
         money: j['money'] as int,
         debt: j['debt'] as int,
         resets: (j['resets'] as int?) ?? 0,
@@ -125,6 +129,7 @@ class Wallet extends ChangeNotifier {
   @visibleForTesting
   Wallet.forTest();
 
+  String name = ''; // 게임에서 쓰는 내 이름 (비어 있으면 아직 안 정함)
   int money = kStartMoney;
   int debt = 0;
   int resetCount = 0; // 빚 리셋을 누른 횟수
@@ -151,6 +156,7 @@ class Wallet extends ChangeNotifier {
   WalletSnapshot snapshot({int maxRecords = 150}) {
     final start = records.length > maxRecords ? records.length - maxRecords : 0;
     return WalletSnapshot(
+      name: name,
       money: money,
       debt: debt,
       resets: resetCount,
@@ -163,6 +169,7 @@ class Wallet extends ChangeNotifier {
   Future<void> load() async {
     _p = await SharedPreferences.getInstance();
     final p = _p!;
+    name = p.getString('name') ?? '';
     money = p.getInt('money') ?? kStartMoney;
     debt = p.getInt('debt') ?? 0;
     resetCount = p.getInt('resets') ?? 0;
@@ -208,6 +215,15 @@ class Wallet extends ChangeNotifier {
       'records',
       records.map((r) => jsonEncode(r.toJson())).toList(),
     );
+  }
+
+  /// 이름을 바꾼다 (앞뒤 공백 제거, 최대 8글자)
+  void setName(String v) {
+    var t = v.trim();
+    if (t.length > 8) t = t.substring(0, 8);
+    name = t;
+    _p?.setString('name', t);
+    notifyListeners();
   }
 
   /// 판이 끝났을 때 한 번만 정산한다. 같은 판을 다시 받아도 무시한다.

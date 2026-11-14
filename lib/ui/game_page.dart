@@ -14,14 +14,17 @@ import 'table_layout.dart';
 import 'wallet_panel.dart';
 
 /// 자리 이름: 2명이면 '상대', 3명이면 내 다음 순서가 '상대1' 그 다음이 '상대2'
-String seatName(int owner, int me, int n) {
+String seatName(int owner, int me, int n, [Map<int, String>? names]) {
   if (owner == me) return '나';
+  final nm = names?[owner];
+  if (nm != null && nm.isNotEmpty) return nm;
   if (n == 2) return '상대';
   return '상대${(owner - me + n) % n}';
 }
 
-String eventText(GameEvent e, int me, [int n = 2]) {
-  final who = seatName(e.p, me, n);
+String eventText(GameEvent e, int me,
+    [int n = 2, Map<int, String>? names]) {
+  final who = seatName(e.p, me, n, names);
   switch (e.code) {
     case 'ppeok':
       return '$who: 뻑!';
@@ -99,6 +102,22 @@ class _GamePageState extends State<GamePage> {
   bool _resultTimerSet = false;
 
   MatgoSession get s => widget.session;
+
+  /// 자리별 이름 (같은 이름이 있으면 자리 번호를 붙여 구분)
+  Map<int, String> get _names {
+    final raw = <int, String>{
+      s.mySeat: Wallet.i.name,
+      for (final e in s.wallets.entries) e.key: e.value.name,
+    };
+    final out = <int, String>{};
+    raw.forEach((seat, name) {
+      final t = name.trim();
+      if (t.isEmpty) return;
+      final dup = raw.entries.any((o) => o.key != seat && o.value.trim() == t);
+      out[seat] = dup ? '$t${seat + 1}' : t;
+    });
+    return out;
+  }
 
   @override
   void initState() {
@@ -275,7 +294,7 @@ class _GamePageState extends State<GamePage> {
       _later(land, () => HapticFeedback.lightImpact());
     }
 
-    final texts = v.events.map((e) => eventText(e, v.me, v.n)).toList();
+    final texts = v.events.map((e) => eventText(e, v.me, v.n, _names)).toList();
     if (texts.isNotEmpty) {
       final text = texts.join('   ');
       final token = ++_bannerSeq;
@@ -636,7 +655,7 @@ class _GamePageState extends State<GamePage> {
 
   Widget _oppWalletBadge(ViewState v, int owner,
       {required double left, required double width}) {
-    final name = seatName(owner, v.me, v.n);
+    final name = seatName(owner, v.me, v.n, _names);
     return Positioned(
       left: left,
       top: 2,
@@ -706,7 +725,7 @@ class _GamePageState extends State<GamePage> {
     final canBomb = canPlay && inHandSame == 3 && floorSame == 1;
     final canShake = canPlay && inHandSame >= 3 && floorSame == 0;
 
-    final turnName = seatName(v.turn, v.me, v.n);
+    final turnName = seatName(v.turn, v.me, v.n, _names);
     String prompt;
     if (v.phase == Phase.ended) {
       prompt = '판이 끝났어';
@@ -777,12 +796,12 @@ class _GamePageState extends State<GamePage> {
       for (var gi = 0; gi < v.others.length; gi++)
         if (v.n == 2)
           _label(TableLayout.oppBoard.dx,
-              _head(v, v.others[gi], seatName(v.others[gi], v.me, v.n)),
+              _head(v, v.others[gi], seatName(v.others[gi], v.me, v.n, _names)),
               v.turn != v.me)
         else
           _label(
             TableLayout.oppBoards3[gi].dx,
-            _head(v, v.others[gi], seatName(v.others[gi], v.me, v.n)),
+            _head(v, v.others[gi], seatName(v.others[gi], v.me, v.n, _names)),
             v.turn == v.others[gi],
             top: TableLayout.oppBoards3[gi].dy - 19,
             width: TableLayout.oppCap3.width,
@@ -939,7 +958,7 @@ class _GamePageState extends State<GamePage> {
         ? [
             for (var i = 0; i < r.bakLines.length; i++)
               for (final l in r.bakLines[i])
-                '${seatName(i, v.me, v.n)} $l',
+                '${seatName(i, v.me, v.n, _names)} $l',
           ]
         : r.lines.where((l) => l.contains('박')).toList();
     return Container(
@@ -963,7 +982,7 @@ class _GamePageState extends State<GamePage> {
                   Text('${r.points}점', style: const TextStyle(fontSize: 22)),
                 if (r.winner >= 0 && multi) ...[
                   Text(
-                    '${seatName(r.winner, v.me, v.n)} 우승',
+                    '${seatName(r.winner, v.me, v.n, _names)} 우승',
                     style: const TextStyle(fontSize: 16),
                   ),
                   Wrap(
@@ -972,7 +991,7 @@ class _GamePageState extends State<GamePage> {
                     children: [
                       for (var i = 0; i < r.payments.length; i++)
                         Text(
-                          '${seatName(i, v.me, v.n)} ${sp(r.payments[i])}',
+                          '${seatName(i, v.me, v.n, _names)} ${sp(r.payments[i])}',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -1033,7 +1052,7 @@ class _GamePageState extends State<GamePage> {
                   Text(
                     i == v.me
                         ? '내 족보: ${_joinOrNone(r.details[i])}'
-                        : '${v.n == 2 ? '상대' : seatName(i, v.me, v.n)} 족보: ${_joinOrNone(r.details[i])}',
+                        : '${seatName(i, v.me, v.n, _names)} 족보: ${_joinOrNone(r.details[i])}',
                   ),
                 const SizedBox(height: 10),
                 FilledButton(
